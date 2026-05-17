@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hermes Agent Constellation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Share+Tech+Mono&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0a0a0f;
+    --bg-panel: #0d0d14;
+    --border: #1a1a2e;
+    --text: #c0c0c0;
+    --green: #00ff41;
+    --cyan: #00e5ff;
+    --purple: #b24dff;
+    --pink: #ff2d7b;
+    --yellow: #ffd700;
+    --blue: #4d8bff;
+    --orange: #ff8c00;
+    --dim: #444;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; overflow: hidden; height: 100vh; width: 100vw; }
+
+  .header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 16px 24px;
+    background: linear-gradient(180deg, rgba(10,10,15,0.95) 0%, rgba(10,10,15,0.7) 80%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: flex-start;
+  }
+  .header-left h1 { font-family: 'Share Tech Mono', monospace; font-size: 18px; color: var(--green); letter-spacing: 2px; text-transform: uppercase; }
+  .header-left h1 span { color: var(--dim); }
+  .header-left .subtitle { font-size: 11px; color: var(--dim); margin-top: 4px; letter-spacing: 1px; }
+  .header-left .subtitle .live { color: var(--green); }
+  .header-right { text-align: right; font-size: 10px; color: var(--dim); line-height: 1.6; }
+  .header-right .machine { color: var(--cyan); }
+  .header-right .machine.win { color: var(--orange); }
+
+  #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+  canvas { display: block; }
+
+  .detail-panel {
+    position: fixed; top: 60px; right: 0; width: 340px; height: calc(100vh - 60px);
+    background: var(--bg-panel); border-left: 1px solid var(--border);
+    padding: 20px; overflow-y: auto; z-index: 50; transition: transform 0.3s ease;
+  }
+  .detail-panel.collapsed { transform: translateX(340px); }
+  .detail-panel h2 { font-size: 16px; color: var(--cyan); margin-bottom: 2px; font-family: 'Share Tech Mono', monospace; letter-spacing: 1px; }
+  .detail-panel .host-tag { font-size: 9px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--border); color: var(--dim); display: inline-block; margin-bottom: 4px; }
+  .detail-panel .role { font-size: 11px; color: var(--dim); margin-bottom: 16px; font-style: italic; }
+  .detail-section { margin-bottom: 16px; }
+  .detail-section h3 { font-size: 10px; color: var(--purple); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .detail-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; border-bottom: 1px solid rgba(26,26,46,0.5); }
+  .detail-row .label { color: var(--dim); }
+  .detail-row .value { color: var(--text); text-align: right; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .conn-list { list-style: none; font-size: 11px; }
+  .conn-list li { padding: 4px 0; display: flex; align-items: center; gap: 8px; }
+  .conn-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  .conn-type { color: var(--dim); font-size: 9px; margin-left: auto; }
+  .platforms { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .platform-badge { font-size: 9px; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--border); color: var(--dim); }
+  .platform-badge.active { border-color: var(--green); color: var(--green); background: rgba(0,255,65,0.08); }
+  .legend { position: fixed; bottom: 16px; left: 16px; background: rgba(13,13,20,0.9); border: 1px solid var(--border); padding: 12px 16px; border-radius: 4px; z-index: 50; }
+  .legend h4 { font-size: 9px; color: var(--purple); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--dim); margin-bottom: 4px; }
+  .legend-line { width: 24px; height: 2px; border-radius: 1px; }
+  .legend-circle { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
+  .status-bar { position: fixed; bottom: 16px; right: 360px; font-size: 9px; color: var(--dim); z-index: 50; }
+  .status-bar .fresh { color: var(--green); }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <h1>// Hermes Agent <span>Constellation</span></h1>
+    <div class="subtitle">
+      <span class="live">●</span> <span id="hdr-summary">loading...</span>
+    </div>
+  </div>
+  <div class="header-right" id="hdr-machines"></div>
+</div>
+
+<div id="canvas-container"><canvas id="graph"></canvas></div>
+
+<div class="detail-panel" id="detail-panel">
+  <h2 id="dp-name">—</h2>
+  <div class="host-tag" id="dp-host">—</div>
+  <div class="role" id="dp-role">—</div>
+  <div class="detail-section">
+    <h3>Identity</h3>
+    <div class="detail-row"><span class="label">Model</span><span class="value" id="dp-model">—</span></div>
+    <div class="detail-row"><span class="label">Provider</span><span class="value" id="dp-provider">—</span></div>
+    <div class="detail-row"><span class="label">Voice</span><span class="value" id="dp-voice">—</span></div>
+    <div class="detail-row"><span class="label">Home</span><span class="value" id="dp-home">—</span></div>
+  </div>
+  <div class="detail-section"><h3>Toolsets</h3><div class="platforms" id="dp-toolsets"></div></div>
+  <div class="detail-section"><h3>Connections</h3><ul class="conn-list" id="dp-connections"></ul></div>
+  <div class="detail-section"><h3>Platforms</h3><div class="platforms" id="dp-platforms"></div></div>
+</div>
+
+<div class="legend">
+  <h4>Legend</h4>
+  <div class="legend-item"><div class="legend-circle" style="border-color: var(--cyan);"></div> Mac Agent</div>
+  <div class="legend-item"><div class="legend-circle" style="border-color: var(--orange);"></div> Windows Agent</div>
+  <div class="legend-item"><div class="legend-circle" style="border-color: var(--green);"></div> Infrastructure</div>
+  <div class="legend-item"><div class="legend-circle" style="border-color: var(--blue);"></div> External Service</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--yellow);"></div> Honcho Peer</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--orange);"></div> Cross-Mesh Link</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--green);"></div> Gateway Host</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--blue);"></div> Platform Link</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--dim); opacity:0.4;"></div> Sibling Profile</div>
+</div>
+
+<div class="status-bar" id="status-bar"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DYNAMIC CONSTELLATION — loads from agents.json
+// ═══════════════════════════════════════════════════════
+
+let DATA = null;
+let selectedAgent = null;
+let hoveredAgent = null;
+let time = 0;
+
+const canvas = document.getElementById('graph');
+const ctx = canvas.getContext('2d');
+
+// ── Load data ──
+async function loadData() {
+  try {
+    const resp = await fetch('agents.json?t=' + Date.now());
+    DATA = await resp.json();
+    updateHeader();
+    layoutGraph();
+    render();
+  } catch (e) {
+    console.error('Failed to load agents.json:', e);
+    document.getElementById('hdr-summary').textContent = 'ERROR: agents.json not found';
+  }
+}
+
+function updateHeader() {
+  const agents = DATA.agents || {};
+  const machineCount = (DATA.machines || []).length;
+  const agentCount = Object.values(agents).filter(a => a.type === 'agent').length;
+  document.getElementById('hdr-summary').textContent =
+    `${machineCount} machine${machineCount !== 1 ? 's' : ''} · ${agentCount} agent${agentCount !== 1 ? 's' : ''}`;
+
+  const hdrRight = document.getElementById('hdr-machines');
+  hdrRight.innerHTML = '';
+  (DATA.machines || []).forEach(m => {
+    const cls = m.os === 'Windows' ? 'machine win' : 'machine';
+    const gw = (DATA.gateway || {})[m.tag] || {};
+    hdrRight.innerHTML += `<div><span class="${cls}">◆</span> ${m.hostname} · ${m.os} · gateway <span style="color:${m.os === 'Windows' ? '#ff8c00' : '#00ff41'}">${gw.pid || '—'}</span></div>`;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// LAYOUT — auto-position by machine zones
+// ═══════════════════════════════════════════════════════
+
+let positions = {};
+let machineZones = {};
+
+function layoutGraph() {
+  const w = window.innerWidth - 340;
+  const h = window.innerHeight;
+  const agents = DATA.agents || {};
+
+  // Group agents by machine
+  const byMachine = {};
+  for (const [id, agent] of Object.entries(agents)) {
+    const m = agent.machine || 'unknown';
+    if (!byMachine[m]) byMachine[m] = [];
+    byMachine[m].push({ id, ...agent });
+  }
+
+  const machines = Object.keys(byMachine).sort();
+  const machineCount = machines.length;
+  const zoneWidth = Math.min(480, (w - 40) / machineCount);
+  const totalWidth = zoneWidth * machineCount;
+  const startX = (w - totalWidth) / 2 + zoneWidth / 2;
+
+  positions = {};
+  machineZones = {};
+
+  machines.forEach((m, mi) => {
+    const cx = startX + mi * zoneWidth;
+    const cy = h / 2;
+    machineZones[m] = { cx, cy, w: zoneWidth - 20, h: Math.min(440, h - 100) };
+
+    const nodes = byMachine[m];
+    const infra = nodes.filter(n => n.type === 'infra');
+    const agentNodes = nodes.filter(n => n.type === 'agent');
+    const services = nodes.filter(n => n.type === 'service');
+
+    // Position infra
+    const host = infra.find(n => n.label === 'HOST');
+    const gw = infra.find(n => n.label?.includes('Gateway'));
+
+    if (host) positions[host.id] = { x: cx, y: cy - 20 };
+    if (gw) positions[gw.id] = { x: cx + (mi % 2 === 0 ? -140 : 140), y: cy - 150 };
+
+    // Position default agent (sublabel [default])
+    const def = agentNodes.find(n => n.sublabel === '[default]');
+    if (def) positions[def.id] = { x: cx, y: cy - 80 };
+
+    // Position sub-profiles in arc
+    const subs = agentNodes.filter(n => n.sublabel !== '[default]');
+    subs.forEach((s, si) => {
+      const angle = -Math.PI/3 + (si / Math.max(subs.length - 1, 1)) * Math.PI * 0.8;
+      const r = 140;
+      positions[s.id] = {
+        x: cx + Math.cos(angle) * r * (mi % 2 === 0 ? 1 : -1),
+        y: cy + 40 + Math.sin(angle) * r * 0.5
+      };
+    });
+
+    // Position services
+    services.forEach((s, si) => {
+      positions[s.id] = { x: cx + (si - (services.length-1)/2) * 100, y: cy - 250 };
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════════════════
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.scale(dpr, dpr);
+  if (DATA) layoutGraph();
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
+  return { r, g, b };
+}
+
+function drawGrid() {
+  const w = window.innerWidth, h = window.innerHeight;
+  ctx.strokeStyle = 'rgba(26,26,46,0.3)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < w; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  for (let y = 0; y < h; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+}
+
+function drawMachineZone(zone, color, label, t) {
+  const rgb = hexToRgb(color);
+  const pulse = (Math.sin(t * 0.5) + 1) / 2;
+  ctx.setLineDash([6, 8]);
+  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.08 + pulse * 0.04})`;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(zone.cx - zone.w/2, zone.cy - zone.h/2, zone.w, zone.h);
+  ctx.setLineDash([]);
+  ctx.font = "400 10px 'Share Tech Mono', monospace";
+  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.3)`;
+  ctx.textAlign = 'left';
+  ctx.fillText(label, zone.cx - zone.w/2 + 12, zone.cy - zone.h/2 + 16);
+}
+
+function drawEdge(from, to, color, type, t) {
+  const a = positions[from], b = positions[to];
+  if (!a || !b) return;
+  const rgb = hexToRgb(color);
+  const pulse = (Math.sin(t * 2 + a.x * 0.01) + 1) / 2;
+
+  if (type === 'honcho') { ctx.setLineDash([8, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.4 + pulse * 0.3})`; ctx.lineWidth = 1.5; }
+  else if (type === 'sibling') { ctx.setLineDash([4, 8]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`; ctx.lineWidth = 1; }
+  else if (type === 'cross-mesh') { ctx.setLineDash([12, 4]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.35 + pulse * 0.25})`; ctx.lineWidth = 2; }
+  else { ctx.setLineDash([]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.5 + pulse * 0.3})`; ctx.lineWidth = 2; }
+
+  ctx.beginPath();
+  if (type === 'cross-mesh') {
+    const mx = (a.x + b.x) / 2, my = Math.min(a.y, b.y) - 80;
+    ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(mx, my, b.x, b.y);
+  } else {
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+
+  if (type !== 'sibling') {
+    const prog = (t * 0.3 + a.x * 0.005) % 1;
+    let px, py;
+    if (type === 'cross-mesh') {
+      const mx = (a.x + b.x) / 2, my = Math.min(a.y, b.y) - 80;
+      const u = 1 - prog;
+      px = u*u*a.x + 2*u*prog*mx + prog*prog*b.x;
+      py = u*u*a.y + 2*u*prog*my + prog*prog*b.y;
+    } else {
+      px = a.x + (b.x - a.x) * prog; py = a.y + (b.y - a.y) * prog;
+    }
+    ctx.beginPath(); ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.8)`; ctx.fill();
+  }
+}
+
+function drawNode(id, agent, t) {
+  const p = positions[id]; if (!p) return;
+  const sel = selectedAgent === id, hov = hoveredAgent === id;
+  const isInfra = agent.type === 'infra', isSvc = agent.type === 'service';
+  const rgb = hexToRgb(agent.color);
+
+  const glowSize = sel ? 45 : hov ? 35 : 22;
+  const glowAlpha = sel ? 0.25 : hov ? 0.15 : 0.08;
+  const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowSize);
+  grad.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${glowAlpha})`);
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad; ctx.fillRect(p.x - glowSize, p.y - glowSize, glowSize * 2, glowSize * 2);
+
+  const ringR = (isInfra ? 22 : 26) + Math.sin(t * 1.5 + p.x * 0.01) * 3;
+  ctx.beginPath(); ctx.arc(p.x, p.y, ringR, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${sel ? 0.6 : 0.12})`;
+  ctx.lineWidth = sel ? 2 : 1; ctx.stroke();
+
+  const r = isInfra ? 18 : isSvc ? 14 : 22;
+  ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${sel ? 0.2 : 0.1})`; ctx.fill();
+  ctx.strokeStyle = agent.color; ctx.lineWidth = sel ? 2.5 : hov ? 2 : 1.5; ctx.stroke();
+
+  ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = agent.color; ctx.fill();
+
+  ctx.font = `500 ${sel ? 13 : 11}px 'JetBrains Mono', monospace`;
+  ctx.fillStyle = agent.color; ctx.textAlign = 'center';
+  ctx.fillText(agent.label, p.x, p.y + r + 16);
+
+  ctx.font = `300 9px 'JetBrains Mono', monospace`; ctx.fillStyle = '#666';
+  ctx.fillText(agent.sublabel, p.x, p.y + r + 28);
+
+  for (let i = 0; i < 3; i++) {
+    const angle = t * (0.5 + i * 0.3) + (i * Math.PI * 2 / 3);
+    const orbitR = r + 12 + i * 6;
+    ctx.beginPath(); ctx.arc(p.x + Math.cos(angle) * orbitR, p.y + Math.sin(angle) * orbitR, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.4 + Math.sin(t + i) * 0.2})`; ctx.fill();
+  }
+}
+
+function drawScanline(t) {
+  const h = window.innerHeight, y = (t * 50) % h;
+  const grad = ctx.createLinearGradient(0, y - 2, 0, y + 2);
+  grad.addColorStop(0, 'transparent'); grad.addColorStop(0.5, 'rgba(0,229,255,0.03)'); grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad; ctx.fillRect(0, y - 2, window.innerWidth, 4);
+}
+
+function render() {
+  if (!DATA) return;
+  const w = window.innerWidth, h = window.innerHeight;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#0a0a0f'; ctx.fillRect(0, 0, w, h);
+
+  drawGrid();
+  drawScanline(time);
+
+  // Machine zones
+  for (const [m, zone] of Object.entries(machineZones)) {
+    const machineInfo = (DATA.machines || []).find(x => x.tag === m);
+    const color = machineInfo?.os === 'Windows' ? '#ff8c00' : '#00ff41';
+    const label = `// ${machineInfo?.os || m} — ${machineInfo?.hostname || m}`;
+    drawMachineZone(zone, color, label, time);
+  }
+
+  // Divider
+  const gw = w - 340;
+  if (Object.keys(machineZones).length > 1) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
+    ctx.beginPath(); ctx.moveTo(gw / 2 + 10, 60); ctx.lineTo(gw / 2 + 10, h - 20); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  (DATA.edges || []).forEach(([from, to, type, color]) => drawEdge(from, to, color, type, time));
+  Object.entries(DATA.agents || {}).forEach(([id, agent]) => drawNode(id, agent, time));
+
+  time += 0.016;
+  requestAnimationFrame(render);
+}
+
+// ═══════════════════════════════════════════════════════
+// INTERACTION
+// ═══════════════════════════════════════════════════════
+
+function hitTest(mx, my) {
+  for (const [id, agent] of Object.entries(DATA?.agents || {})) {
+    const p = positions[id]; if (!p) continue;
+    const r = agent.type === 'infra' ? 22 : agent.type === 'service' ? 18 : 28;
+    if ((mx - p.x) ** 2 + (my - p.y) ** 2 < r * r) return id;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  hoveredAgent = hitTest(e.clientX, e.clientY);
+  canvas.style.cursor = hoveredAgent ? 'pointer' : 'default';
+});
+
+canvas.addEventListener('click', (e) => {
+  const hit = hitTest(e.clientX, e.clientY);
+  if (hit) { selectedAgent = hit === selectedAgent ? null : hit; updateDetailPanel(); }
+});
+
+function updateDetailPanel() {
+  const panel = document.getElementById('detail-panel');
+  if (!selectedAgent || !DATA) { panel.classList.add('collapsed'); return; }
+  panel.classList.remove('collapsed');
+  const a = DATA.agents[selectedAgent]; if (!a) return;
+  const d = a.details || {};
+
+  document.getElementById('dp-name').textContent = a.label;
+  document.getElementById('dp-name').style.color = a.color;
+  const hostTag = document.getElementById('dp-host');
+  hostTag.textContent = a.machine || '—';
+  hostTag.style.borderColor = a.machine === 'win' ? 'var(--orange)' : 'var(--green)';
+  hostTag.style.color = a.machine === 'win' ? 'var(--orange)' : 'var(--green)';
+  document.getElementById('dp-role').textContent = d.role || '';
+  document.getElementById('dp-model').textContent = d.model || '—';
+  document.getElementById('dp-provider').textContent = d.provider || '—';
+  document.getElementById('dp-voice').textContent = d.voice || '—';
+  document.getElementById('dp-home').textContent = d.home || '—';
+
+  const tsDiv = document.getElementById('dp-toolsets'); tsDiv.innerHTML = '';
+  (d.toolsets || []).forEach(t => { const b = document.createElement('div'); b.className = 'platform-badge'; b.textContent = t; tsDiv.appendChild(b); });
+
+  const connUl = document.getElementById('dp-connections'); connUl.innerHTML = '';
+  (DATA.edges || []).forEach(([from, to, type, color]) => {
+    let peer = from === selectedAgent ? to : to === selectedAgent ? from : null;
+    if (!peer) return;
+    const pa = DATA.agents[peer]; if (!pa) return;
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="conn-dot" style="background:${pa.color}"></span>${pa.label}<span class="conn-type">${type}</span>`;
+    connUl.appendChild(li);
+  });
+
+  const platDiv = document.getElementById('dp-platforms'); platDiv.innerHTML = '';
+  ['telegram', 'discord', 'slack', 'whatsapp', 'signal'].forEach(p => {
+    const b = document.createElement('div');
+    b.className = 'platform-badge' + ((d.platforms || []).includes(p) ? ' active' : '');
+    b.textContent = p; platDiv.appendChild(b);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT + AUTO-REFRESH
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', resize);
+resize();
+loadData();
+
+// Auto-refresh every 60 seconds
+setInterval(async () => {
+  try {
+    const resp = await fetch('agents.json?t=' + Date.now());
+    const fresh = await resp.json();
+    // Deep compare agents count to detect changes
+    const oldCount = Object.keys(DATA?.agents || {}).length;
+    const newCount = Object.keys(fresh.agents || {}).length;
+    DATA = fresh;
+    layoutGraph();
+    updateHeader();
+    if (oldCount !== newCount) selectedAgent = null;
+    updateDetailPanel();
+    document.getElementById('status-bar').innerHTML =
+      `<span class="fresh">●</span> refreshed ${new Date().toLocaleTimeString()}`;
+  } catch (e) { /* silent */ }
+}, 60000);
+</script>
+</body>
+</html>

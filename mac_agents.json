@@ -1,0 +1,221 @@
+{
+  "machine": {
+    "hostname": "Countzer0s-MacBook-Pro",
+    "os": "Darwin",
+    "tag": "mac"
+  },
+  "gateway": {
+    "pid": 81213,
+    "state": "running"
+  },
+  "agents": {
+    "host": {
+      "id": "host",
+      "label": "HOST",
+      "sublabel": "mac",
+      "type": "infra",
+      "color": "#00ff41",
+      "machine": "mac",
+      "details": {
+        "machine": "Countzer0s-MacBook-Pro",
+        "os": "Darwin",
+        "home": "~/.hermes"
+      }
+    },
+    "gateway": {
+      "id": "gateway",
+      "label": "Hermes Gateway",
+      "sublabel": "PID 81213",
+      "type": "infra",
+      "color": "#00ff41",
+      "machine": "mac",
+      "details": {
+        "pid": 81213,
+        "gateway_state": "running",
+        "home": "~/.hermes"
+      }
+    },
+    "buddha": {
+      "id": "buddha",
+      "label": "Buddha",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#ffd700",
+      "machine": "mac",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "",
+        "role": "",
+        "home": "~/.hermes/profiles/buddha",
+        "toolsets": [
+          "hermes-cli"
+        ],
+        "platforms": []
+      }
+    },
+    "hiro": {
+      "id": "hiro",
+      "label": "Hiro Protagonist",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#ff2d7b",
+      "machine": "mac",
+      "details": {
+        "model": "MiniMax-M2.7",
+        "provider": "minimax",
+        "voice": "Concise, technical, laced with sarcasm and precise termin...",
+        "role": "Last of the Freelance Hackers | Greatest Swordfighter in the World | CIC Stringer",
+        "home": "~/.hermes/profiles/hiro",
+        "toolsets": [
+          "browser",
+          "skills",
+          "terminal",
+          "file",
+          "web"
+        ],
+        "platforms": []
+      }
+    },
+    "wintermute": {
+      "id": "wintermute",
+      "label": "Wintermute",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#b24dff",
+      "machine": "mac",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "",
+        "role": "",
+        "home": "~/.hermes/profiles/wintermute",
+        "toolsets": [
+          "hermes-cli",
+          "vision",
+          "image_gen",
+          "browser"
+        ],
+        "platforms": []
+      }
+    },
+    "Count Zer0": {
+      "id": "Count Zer0",
+      "label": "Count Zer0",
+      "sublabel": "[default]",
+      "type": "agent",
+      "color": "#00e5ff",
+      "machine": "mac",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "Cyberpunk, console cowboy, capable, cool under pressure.",
+        "role": "Operator / Orchestrator",
+        "home": "~/.hermes",
+        "toolsets": [
+          "hermes-cli",
+          "browser",
+          "skills",
+          "fs",
+          "read",
+          "write",
+          "rl"
+        ],
+        "platforms": [
+          "telegram"
+        ]
+      }
+    },
+    "telegram": {
+      "id": "telegram",
+      "label": "Telegram",
+      "sublabel": "connected",
+      "type": "service",
+      "color": "#4d8bff",
+      "machine": "mac",
+      "details": {
+        "state": "connected"
+      }
+    }
+  },
+  "edges": [
+    [
+      "host",
+      "gateway",
+      "gateway-host",
+      "#00ff41"
+    ],
+    [
+      "gateway",
+      "Count Zer0",
+      "gateway-host",
+      "#00ff41"
+    ],
+    [
+      "Count Zer0",
+      "buddha",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "Count Zer0",
+      "hiro",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "Count Zer0",
+      "wintermute",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "buddha",
+      "host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "hiro",
+      "host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "wintermute",
+      "host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "Count Zer0",
+      "host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "Count Zer0",
+      "telegram",
+      "platform",
+      "#4d8bff"
+    ]
+  ],
+  "honcho_peers": [
+    {
+      "peer": "buddha",
+      "workspace": "hermes",
+      "host_key": "hermes.buddha"
+    },
+    {
+      "peer": "hiro",
+      "workspace": "hermes",
+      "host_key": "hermes.hiro"
+    },
+    {
+      "peer": "wintermute",
+      "workspace": "hermes",
+      "host_key": "hermes.wintermute"
+    }
+  ],
+  "collected_at": "2026-05-17T14:04:20.170669"
+}

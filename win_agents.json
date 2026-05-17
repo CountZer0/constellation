@@ -1,0 +1,108 @@
+{
+  "machine": {
+    "hostname": "DESKTOP-R2D2",
+    "os": "Windows",
+    "tag": "win"
+  },
+  "gateway": {
+    "pid": null,
+    "state": "running"
+  },
+  "agents": {
+    "host": {
+      "id": "host",
+      "label": "HOST",
+      "sublabel": "win",
+      "type": "infra",
+      "color": "#ff8c00",
+      "machine": "win",
+      "details": {
+        "machine": "DESKTOP-R2D2",
+        "os": "Windows",
+        "home": "~/.hermes"
+      }
+    },
+    "gateway": {
+      "id": "gateway",
+      "label": "Hermes Gateway",
+      "sublabel": "Windows",
+      "type": "infra",
+      "color": "#ff8c00",
+      "machine": "win",
+      "details": {
+        "gateway_state": "running",
+        "home": "~/.hermes"
+      }
+    },
+    "CLU": {
+      "id": "CLU",
+      "label": "CLU",
+      "sublabel": "[default]",
+      "type": "agent",
+      "color": "#ff8c00",
+      "machine": "win",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "Control Logic Unit / Digital Commander",
+        "role": "Windows Operator / Orchestrator",
+        "home": "~/.hermes",
+        "toolsets": ["hermes-cli", "browser", "skills", "terminal", "file", "web"],
+        "platforms": ["discord"]
+      }
+    },
+    "CAAC": {
+      "id": "CAAC",
+      "label": "CAAC",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#ff6b6b",
+      "machine": "win",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "Cybernetic Autonomous Analysis Core",
+        "role": "Analysis / Intelligence",
+        "home": "~/.hermes/profiles/caac",
+        "toolsets": ["browser", "skills", "terminal", "file", "web"],
+        "platforms": []
+      }
+    },
+    "ARES": {
+      "id": "ARES",
+      "label": "ARES",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#e055ff",
+      "machine": "win",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "Autonomous Reconnaissance & Exploration System",
+        "role": "Recon / Operations",
+        "home": "~/.hermes/profiles/ares",
+        "toolsets": ["browser", "skills", "terminal", "file", "web"],
+        "platforms": []
+      }
+    },
+    "discord": {
+      "id": "discord",
+      "label": "Discord",
+      "sublabel": "configured",
+      "type": "service",
+      "color": "#5865f2",
+      "machine": "win",
+      "details": { "state": "configured" }
+    }
+  },
+  "edges": [
+    ["host", "gateway", "gateway-host", "#ff8c00"],
+    ["gateway", "CLU", "gateway-host", "#ff8c00"],
+    ["CLU", "CAAC", "honcho", "#ffd700"],
+    ["CLU", "ARES", "honcho", "#ffd700"],
+    ["CAAC", "host", "sibling", "#444"],
+    ["ARES", "host", "sibling", "#444"],
+    ["CLU", "discord", "platform", "#5865f2"]
+  ],
+  "honcho_peers": []
+}
