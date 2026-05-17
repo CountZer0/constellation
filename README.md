@@ -212,6 +212,9 @@ The visualization reads `agents.json` and:
 5. Draws connection lines (honcho, platform, sibling, cross-mesh)
 6. Renders animated particles traveling along edges
 
+## View
+https://countzer0.github.io/constellation/
+
 ## License
 
 MIT
