@@ -16,125 +16,123 @@ A dynamic, cyberpunk-styled network visualization of your [Hermes Agent](https:/
 ## Architecture
 
 ```
-Machine A (Mac)                    Machine B (Windows)
-┌─────────────────┐               ┌─────────────────┐
-│ collect_agents.py│               │ collect_agents.py│
-│ reads:           │               │ reads:           │
-│  ~/.hermes/      │               │  ~/.hermes/      │
-│   SOUL.md        │               │   SOUL.md        │
-│   config.yaml    │               │   config.yaml    │
-│   honcho.json    │               │   honcho.json    │
-│   gateway_state  │               │   gateway_state  │
-│   profiles/*     │               │   profiles/*     │
-└────────┬────────┘               └────────┬────────┘
-         │ writes                          │ writes
-         ▼                                 ▼
-   mac_agents.json                  win_agents.json
-         │                                 │
-         └──────────┬──────────────────────┘
-                    │ merge
-                    ▼
-              agents.json ──────▶ index.html (GitHub Pages)
+Machine A (Mac)         Machine B (Win/WSL)        Machine C (Linux)
+┌─────────────────┐     ┌─────────────────┐        ┌─────────────────┐
+│ collect_agents.py│     │ collect_agents.py│        │ collect_agents.py│
+│ reads:           │     │ reads:           │        │ reads:           │
+│  ~/.hermes/      │     │  ~/.hermes/      │        │  ~/.hermes/      │
+│   SOUL.md        │     │   SOUL.md        │        │   SOUL.md        │
+│   config.yaml    │     │   config.yaml    │        │   config.yaml    │
+│   gateway_state  │     │   gateway_state  │        │   gateway_state  │
+│   profiles/*     │     │   profiles/*     │        │   profiles/*     │
+└────────┬────────┘     └────────┬────────┘        └────────┬────────┘
+         │ writes                │ writes                    │ writes
+         ▼                       ▼                           ▼
+   mac_agents.json         win_agents.json           linux_agents.json
+         │                       │                           │
+         └───────────────────────┼───────────────────────────┘
+                                 │ merge_agents.py
+                                 ▼
+                           agents.json
+                                 │
+                                 ▼
+                      GitHub Actions Pages
+                                 │
+                                 ▼
+                    https://countzer0.github.io/constellation/
 ```
 
-## Quick Start
+## How Updates Flow
+
+Each machine runs `constellation-update.sh` on a cron (hourly). The script:
+
+1. **Pulls** the latest from `origin/main` (picks up other machines' recent updates)
+2. **Collects** local agent data into `<machine>_agents.json` (only overwrites its own file)
+3. **Merges** all `*_agents.json` files into `agents.json`
+4. **Commits and pushes** to `main`
+5. GitHub Actions deploys the updated page automatically
+
+This means each machine only needs to know its own config — the repo carries the other machines' data between them.
+
+## Setup
 
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/CountZer0/constellation.git
-cd constellation
+git clone https://github.com/CountZer0/constellation.git ~/.hermes/constellation
+cd ~/.hermes/constellation
 ```
 
-### 2. Collect data from your machine
+### 2. Configure for this machine
+
+Edit `constellation-update.sh` — set the defaults at the top:
 
 ```bash
-# Mac (Count Zer0's default agent)
-python3 collect_agents.py --machine mac --default-name "Count Zer0" -o mac_agents.json
-
-# Windows (CLU is the default agent)
-python3 collect_agents.py --machine win --default-name "CLU" -o win_agents.json
-
-# Linux (if applicable)
-python3 collect_agents.py --machine linux --default-name "YourAgent" -o linux_agents.json
+MACHINE="${1:-linux}"         # mac, win, or linux
+DEFAULT_NAME="${2:-CLU}"      # Your default agent's display name
 ```
 
-### 3. Merge all machines
+### 3. Test it manually
 
 ```bash
-python3 merge_agents.py mac_agents.json win_agents.json -o agents.json
+bash constellation-update.sh
 ```
 
-### 4. View locally
+This will:
+- Collect your machine's data into `<machine>_agents.json`
+- Merge all available machine files into `agents.json`
+- Commit and push if there are changes
+
+### 4. Set up the cron job
+
+**Option A: System crontab (recommended)**
 
 ```bash
-python3 -m http.server 8766
-# Open http://127.0.0.1:8766
+# Hourly update
+(crontab -l 2>/dev/null; echo '0 * * * * /bin/bash ~/.hermes/constellation/constellation-update.sh >> /tmp/constellation-update.log 2>&1') | crontab -
 ```
 
-## Automated Updates (Hermes Cron)
+**Option B: Hermes cron**
 
-Set up a Hermes cron job to automatically collect and push data on schedule.
-
-### On each machine:
-
-Create a collect-and-push script:
-
-```bash
-cat > ~/constellation-update.sh << 'EOF'
-#!/bin/bash
-cd ~/.hermes/profiles/wintermute/constellation  # or wherever you cloned
-
-# Collect this machine's data
-python3 collect_agents.py --machine mac --default-name "Count Zer0" -o mac_agents.json
-
-# Merge with other machines' data (if you have them locally)
-# python3 merge_agents.py mac_agents.json win_agents.json -o agents.json
-
-# Commit and push
-git add agents.json mac_agents.json
-git commit -m "Update constellation data $(date +%Y-%m-%d_%H:%M)" || exit 0
-git push origin main
-EOF
-chmod +x ~/constellation-update.sh
+In a Hermes session:
+```
+Create a cron job: run ~/.hermes/constellation/constellation-update.sh every hour
 ```
 
-### Hermes Cron Setup:
+## Machine Reference
 
-In Hermes, create a cron job:
+| Machine | Tag | Hostname | Default Agent | Profiles | File |
+|---------|-----|----------|---------------|----------|------|
+| MacBook Pro | `mac` | Countzer0s-MacBook-Pro | Count Zer0 | buddha, hiro, wintermute | `mac_agents.json` |
+| Win/WSL | `win` | Cyberspace-Seven | CLU | ares, caac | `win_agents.json` |
+| Linux server | `linux` | ubuntu-4gb-hil-1 | CLU | silveroak | `linux_agents.json` |
 
-```
-/cron create
-Schedule: every 1h
-Prompt: Run the constellation update script: bash ~/constellation-update.sh
-```
+## Adding a New Machine
 
-Or via the Hermes config:
+1. Clone the repo on the new machine:
+   ```bash
+   git clone https://github.com/CountZer0/constellation.git ~/.hermes/constellation
+   ```
+2. Edit `constellation-update.sh` — set `MACHINE` and `DEFAULT_NAME`
+3. Run `bash constellation-update.sh` to test
+4. Set up the crontab (see above)
 
-```yaml
-# In your Hermes cron configuration
-- name: constellation-update
-  schedule: "0 * * * *"  # Every hour
-  command: "bash ~/constellation-update.sh"
-```
+The new machine's data will automatically appear in the merged `agents.json` on next push.
 
-### Multi-Machine Merge:
+## Adding a New Agent (Profile)
 
-If you want a single merged view from multiple machines, set up the merge on one machine (or a CI):
-
-```bash
-# On the machine that hosts the merged view
-python3 merge_agents.py mac_agents.json win_agents.json linux_agents.json -o agents.json
-git add agents.json && git commit -m "Merge" && git push
-```
+1. Create a profile directory: `~/.hermes/profiles/myagent/`
+2. Add `SOUL.md` with identity info (Name, Title, Voice, Role)
+3. Add `config.yaml` with model/provider settings
+4. Re-run `bash constellation-update.sh` — the collector auto-discovers profiles
 
 ## GitHub Pages Setup
 
-1. Push to GitHub: `git push origin main`
-2. Go to repo Settings → Pages
-3. Source: "Deploy from a branch"
-4. Branch: `main`, folder: `/ (root)`
-5. Save — your constellation is live at `https://countzer0.github.io/constellation/`
+Already configured via `.github/workflows/pages.yml`. Every push to `main` triggers a deploy.
+
+1. Go to repo Settings → Pages
+2. Source: "GitHub Actions"
+3. Done — live at `https://countzer0.github.io/constellation/`
 
 ## File Reference
 
@@ -142,12 +140,12 @@ git add agents.json && git commit -m "Merge" && git push
 |------|---------|
 | `collect_agents.py` | Reads local Hermes configs, outputs machine-specific JSON |
 | `merge_agents.py` | Merges multiple machine JSON files into one `agents.json` |
-| `agents.json` | The live data source (auto-generated, do not edit manually) |
+| `constellation-update.sh` | All-in-one: collect → merge → commit → push |
+| `agents.json` | The merged data source (auto-generated, do not edit) |
 | `index.html` | Interactive visualization (loads `agents.json` at runtime) |
-| `mac_agents.json` | Mac machine data (generated by collector) |
-| `win_agents.json` | Windows machine data (generated or placeholder) |
+| `*_agents.json` | Per-machine data (auto-generated by collector) |
 
-## CLI Options
+## CLI Reference
 
 ### collect_agents.py
 
@@ -156,7 +154,7 @@ python3 collect_agents.py [OPTIONS]
 
 Options:
   --machine TAG     Machine identifier: mac, win, linux, etc.
-  --default-name    Display name for the default agent (e.g., "Count Zer0")
+  --default-name    Display name for the default agent (e.g., "CLU")
   -o, --output      Output file path (default: stdout)
 ```
 
@@ -170,14 +168,6 @@ Options:
 ```
 
 ## Customization
-
-### Adding a new agent
-
-1. Create a profile directory: `~/.hermes/profiles/myagent/`
-2. Add `SOUL.md` with identity info (Name, Title, Voice, Role)
-3. Add `config.yaml` with model/provider settings
-4. Add to `honcho.json` as a peer
-5. Re-run the collector script
 
 ### Changing colors
 
@@ -195,27 +185,10 @@ COLOR_MAP = {
 }
 ```
 
-### Adding a new machine
-
-1. Run `collect_agents.py` on the new machine with `--machine <tag>`
-2. Add the output JSON to the merge command
-3. Update the merge script if needed for cross-mesh connections
-
-## How It Works
-
-The visualization reads `agents.json` and:
-
-1. Groups agents by `machine` field into zones
-2. Positions infra nodes (HOST, Gateway) centrally
-3. Places the default agent at the top of each zone
-4. Arranges sub-profiles in an arc below
-5. Draws connection lines (honcho, platform, sibling, cross-mesh)
-6. Renders animated particles traveling along edges
-
 ## View
+
 https://countzer0.github.io/constellation/
 
 ## License
 
 MIT
-# test push 2026-05-18T02:41:19+00:00

@@ -4,6 +4,16 @@
       "tag": "linux",
       "hostname": "ubuntu-4gb-hil-1",
       "os": "Linux"
+    },
+    {
+      "tag": "mac",
+      "hostname": "Countzer0s-MacBook-Pro",
+      "os": "Darwin"
+    },
+    {
+      "tag": "win",
+      "hostname": "Cyberspace-Seven",
+      "os": "Windows"
     }
   ],
   "agents": {
@@ -76,10 +86,235 @@
     "discord": {
       "id": "discord",
       "label": "Discord",
+      "sublabel": "paused",
+      "type": "service",
+      "color": "#666",
+      "machine": "win",
+      "details": {
+        "state": "paused"
+      }
+    },
+    "mac_host": {
+      "id": "mac_host",
+      "label": "HOST",
+      "sublabel": "mac",
+      "type": "infra",
+      "color": "#00ff41",
+      "machine": "mac",
+      "details": {
+        "machine": "Countzer0s-MacBook-Pro",
+        "os": "Darwin",
+        "home": "~/.hermes"
+      }
+    },
+    "mac_gateway": {
+      "id": "mac_gateway",
+      "label": "Hermes Gateway",
+      "sublabel": "PID 81213",
+      "type": "infra",
+      "color": "#00ff41",
+      "machine": "mac",
+      "details": {
+        "pid": 81213,
+        "gateway_state": "running",
+        "home": "~/.hermes"
+      }
+    },
+    "mac_buddha": {
+      "id": "mac_buddha",
+      "label": "Buddha",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#ffd700",
+      "machine": "mac",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "",
+        "role": "",
+        "home": "~/.hermes/profiles/buddha",
+        "toolsets": [
+          "hermes-cli"
+        ],
+        "platforms": []
+      }
+    },
+    "mac_hiro": {
+      "id": "mac_hiro",
+      "label": "Hiro Protagonist",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#ff2d7b",
+      "machine": "mac",
+      "details": {
+        "model": "MiniMax-M2.7",
+        "provider": "minimax",
+        "voice": "Concise, technical, laced with sarcasm and precise termin...",
+        "role": "Last of the Freelance Hackers | Greatest Swordfighter in the World | CIC Stringer",
+        "home": "~/.hermes/profiles/hiro",
+        "toolsets": [
+          "browser",
+          "skills",
+          "terminal",
+          "file",
+          "web"
+        ],
+        "platforms": []
+      }
+    },
+    "mac_wintermute": {
+      "id": "mac_wintermute",
+      "label": "Wintermute",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#b24dff",
+      "machine": "mac",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "",
+        "role": "",
+        "home": "~/.hermes/profiles/wintermute",
+        "toolsets": [
+          "hermes-cli",
+          "vision",
+          "image_gen",
+          "browser"
+        ],
+        "platforms": []
+      }
+    },
+    "mac_Count Zer0": {
+      "id": "mac_Count Zer0",
+      "label": "Count Zer0",
+      "sublabel": "[default]",
+      "type": "agent",
+      "color": "#00e5ff",
+      "machine": "mac",
+      "details": {
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
+        "voice": "Cyberpunk, console cowboy, capable, cool under pressure.",
+        "role": "Operator / Orchestrator",
+        "home": "~/.hermes",
+        "toolsets": [
+          "hermes-cli",
+          "browser",
+          "skills",
+          "fs",
+          "read",
+          "write",
+          "rl"
+        ],
+        "platforms": [
+          "telegram"
+        ]
+      }
+    },
+    "telegram": {
+      "id": "telegram",
+      "label": "Telegram",
       "sublabel": "connected",
       "type": "service",
       "color": "#4d8bff",
-      "machine": "linux",
+      "machine": "win",
+      "details": {
+        "state": "connected"
+      }
+    },
+    "win_host": {
+      "id": "win_host",
+      "label": "HOST",
+      "sublabel": "win",
+      "type": "infra",
+      "color": "#00ff41",
+      "machine": "win",
+      "details": {
+        "machine": "Cyberspace-Seven",
+        "os": "Windows",
+        "home": "~/.hermes"
+      }
+    },
+    "win_gateway": {
+      "id": "win_gateway",
+      "label": "Hermes Gateway",
+      "sublabel": "PID 681069",
+      "type": "infra",
+      "color": "#00ff41",
+      "machine": "win",
+      "details": {
+        "pid": 681069,
+        "gateway_state": "running",
+        "home": "~/.hermes"
+      }
+    },
+    "win_ares": {
+      "id": "win_ares",
+      "label": "Ares",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#e055ff",
+      "machine": "win",
+      "details": {
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "nous",
+        "voice": "",
+        "role": "",
+        "home": "~/.hermes/profiles/ares",
+        "toolsets": [
+          "hermes-cli"
+        ],
+        "platforms": []
+      }
+    },
+    "win_caac": {
+      "id": "win_caac",
+      "label": "Caac",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#ff6b6b",
+      "machine": "win",
+      "details": {
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "nous",
+        "voice": "",
+        "role": "",
+        "home": "~/.hermes/profiles/caac",
+        "toolsets": [
+          "hermes-cli"
+        ],
+        "platforms": []
+      }
+    },
+    "win_CLU": {
+      "id": "win_CLU",
+      "label": "CLU",
+      "sublabel": "[default]",
+      "type": "agent",
+      "color": "#ff8c00",
+      "machine": "win",
+      "details": {
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "nous",
+        "voice": "",
+        "role": "Operator / Orchestrator",
+        "home": "~/.hermes",
+        "toolsets": [
+          "hermes-cli"
+        ],
+        "platforms": [
+          "telegram",
+          "webhook"
+        ]
+      }
+    },
+    "webhook": {
+      "id": "webhook",
+      "label": "Webhook",
+      "sublabel": "connected",
+      "type": "service",
+      "color": "#4d8bff",
+      "machine": "win",
       "details": {
         "state": "connected"
       }
@@ -121,11 +356,157 @@
       "discord",
       "platform",
       "#4d8bff"
+    ],
+    [
+      "mac_host",
+      "mac_gateway",
+      "gateway-host",
+      "#00ff41"
+    ],
+    [
+      "mac_gateway",
+      "mac_Count Zer0",
+      "gateway-host",
+      "#00ff41"
+    ],
+    [
+      "mac_Count Zer0",
+      "mac_buddha",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "mac_Count Zer0",
+      "mac_hiro",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "mac_Count Zer0",
+      "mac_wintermute",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "mac_buddha",
+      "mac_host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "mac_hiro",
+      "mac_host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "mac_wintermute",
+      "mac_host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "mac_Count Zer0",
+      "mac_host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "mac_Count Zer0",
+      "telegram",
+      "platform",
+      "#4d8bff"
+    ],
+    [
+      "win_host",
+      "win_gateway",
+      "gateway-host",
+      "#00ff41"
+    ],
+    [
+      "win_gateway",
+      "win_CLU",
+      "gateway-host",
+      "#00ff41"
+    ],
+    [
+      "win_CLU",
+      "win_ares",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "win_CLU",
+      "win_caac",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "win_ares",
+      "win_host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "win_caac",
+      "win_host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "win_CLU",
+      "win_host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "win_CLU",
+      "telegram",
+      "platform",
+      "#4d8bff"
+    ],
+    [
+      "win_CLU",
+      "webhook",
+      "platform",
+      "#4d8bff"
+    ],
+    [
+      "win_CLU",
+      "discord",
+      "platform",
+      "#4d8bff"
+    ],
+    [
+      "linux_CLU",
+      "mac_Count Zer0",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "linux_CLU",
+      "win_CLU",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "mac_Count Zer0",
+      "win_CLU",
+      "cross-mesh",
+      "#ff8c00"
     ]
   ],
   "gateway": {
     "linux": {
       "pid": 14955,
+      "state": "running"
+    },
+    "mac": {
+      "pid": 81213,
+      "state": "running"
+    },
+    "win": {
+      "pid": 681069,
       "state": "running"
     }
   }
