@@ -2,7 +2,7 @@
   "machines": [
     {
       "tag": "linux",
-      "hostname": "ubuntu-4gb-hil-1",
+      "hostname": "Cyberspace-Seven",
       "os": "Linux"
     },
     {
@@ -25,7 +25,7 @@
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "machine": "ubuntu-4gb-hil-1",
+        "machine": "Cyberspace-Seven",
         "os": "Linux",
         "home": "~/.hermes"
       }
@@ -33,29 +33,48 @@
     "linux_gateway": {
       "id": "linux_gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 6169",
+      "sublabel": "PID 681069",
       "type": "infra",
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "pid": 6169,
+        "pid": 681069,
         "gateway_state": "running",
         "home": "~/.hermes"
       }
     },
-    "linux_silveroak": {
-      "id": "linux_silveroak",
-      "label": "Silveroak",
+    "linux_ares": {
+      "id": "linux_ares",
+      "label": "Ares",
       "sublabel": "profile",
       "type": "agent",
-      "color": "#00e5ff",
+      "color": "#e055ff",
       "machine": "linux",
       "details": {
-        "model": "xiaomi/mimo-v2.5-pro",
-        "provider": "openrouter",
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "nous",
         "voice": "",
         "role": "",
-        "home": "~/.hermes/profiles/silveroak",
+        "home": "~/.hermes/profiles/ares",
+        "toolsets": [
+          "hermes-cli"
+        ],
+        "platforms": []
+      }
+    },
+    "linux_caac": {
+      "id": "linux_caac",
+      "label": "Caac",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#ff6b6b",
+      "machine": "linux",
+      "details": {
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "nous",
+        "voice": "",
+        "role": "",
+        "home": "~/.hermes/profiles/caac",
         "toolsets": [
           "hermes-cli"
         ],
@@ -79,8 +98,31 @@
           "hermes-cli"
         ],
         "platforms": [
-          "discord"
+          "telegram",
+          "webhook"
         ]
+      }
+    },
+    "telegram": {
+      "id": "telegram",
+      "label": "Telegram",
+      "sublabel": "connected",
+      "type": "service",
+      "color": "#4d8bff",
+      "machine": "win",
+      "details": {
+        "state": "connected"
+      }
+    },
+    "webhook": {
+      "id": "webhook",
+      "label": "Webhook",
+      "sublabel": "connected",
+      "type": "service",
+      "color": "#4d8bff",
+      "machine": "win",
+      "details": {
+        "state": "connected"
       }
     },
     "discord": {
@@ -211,17 +253,6 @@
         ]
       }
     },
-    "telegram": {
-      "id": "telegram",
-      "label": "Telegram",
-      "sublabel": "connected",
-      "type": "service",
-      "color": "#4d8bff",
-      "machine": "win",
-      "details": {
-        "state": "connected"
-      }
-    },
     "win_host": {
       "id": "win_host",
       "label": "HOST",
@@ -307,17 +338,6 @@
           "webhook"
         ]
       }
-    },
-    "webhook": {
-      "id": "webhook",
-      "label": "Webhook",
-      "sublabel": "connected",
-      "type": "service",
-      "color": "#4d8bff",
-      "machine": "win",
-      "details": {
-        "state": "connected"
-      }
     }
   },
   "edges": [
@@ -335,12 +355,24 @@
     ],
     [
       "linux_CLU",
-      "linux_silveroak",
+      "linux_ares",
       "honcho",
       "#ffd700"
     ],
     [
-      "linux_silveroak",
+      "linux_CLU",
+      "linux_caac",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "linux_ares",
+      "linux_host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "linux_caac",
       "linux_host",
       "sibling",
       "#444"
@@ -350,6 +382,18 @@
       "linux_host",
       "sibling",
       "#444"
+    ],
+    [
+      "linux_CLU",
+      "telegram",
+      "platform",
+      "#4d8bff"
+    ],
+    [
+      "linux_CLU",
+      "webhook",
+      "platform",
+      "#4d8bff"
     ],
     [
       "linux_CLU",
@@ -498,7 +542,7 @@
   ],
   "gateway": {
     "linux": {
-      "pid": 6169,
+      "pid": 681069,
       "state": "running"
     },
     "mac": {
