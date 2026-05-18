@@ -2,20 +2,20 @@
   "machine": {
     "hostname": "Cyberspace-Seven",
     "os": "Linux",
-    "tag": "win"
+    "tag": "linux"
   },
   "gateway": {
-    "pid": 307045,
+    "pid": 681069,
     "state": "running"
   },
   "agents": {
     "host": {
       "id": "host",
       "label": "HOST",
-      "sublabel": "win",
+      "sublabel": "linux",
       "type": "infra",
       "color": "#00ff41",
-      "machine": "win",
+      "machine": "linux",
       "details": {
         "machine": "Cyberspace-Seven",
         "os": "Linux",
@@ -25,12 +25,12 @@
     "gateway": {
       "id": "gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 307045",
+      "sublabel": "PID 681069",
       "type": "infra",
       "color": "#00ff41",
-      "machine": "win",
+      "machine": "linux",
       "details": {
-        "pid": 307045,
+        "pid": 681069,
         "gateway_state": "running",
         "home": "~/.hermes"
       }
@@ -41,7 +41,7 @@
       "sublabel": "profile",
       "type": "agent",
       "color": "#e055ff",
-      "machine": "win",
+      "machine": "linux",
       "details": {
         "model": "deepseek/deepseek-v4-flash",
         "provider": "nous",
@@ -60,7 +60,7 @@
       "sublabel": "profile",
       "type": "agent",
       "color": "#ff6b6b",
-      "machine": "win",
+      "machine": "linux",
       "details": {
         "model": "deepseek/deepseek-v4-flash",
         "provider": "nous",
@@ -79,7 +79,7 @@
       "sublabel": "[default]",
       "type": "agent",
       "color": "#ff8c00",
-      "machine": "win",
+      "machine": "linux",
       "details": {
         "model": "deepseek/deepseek-v4-flash",
         "provider": "nous",
@@ -101,7 +101,7 @@
       "sublabel": "connected",
       "type": "service",
       "color": "#4d8bff",
-      "machine": "win",
+      "machine": "linux",
       "details": {
         "state": "connected"
       }
@@ -112,7 +112,7 @@
       "sublabel": "connected",
       "type": "service",
       "color": "#4d8bff",
-      "machine": "win",
+      "machine": "linux",
       "details": {
         "state": "connected"
       }
@@ -123,7 +123,7 @@
       "sublabel": "retrying",
       "type": "service",
       "color": "#666",
-      "machine": "win",
+      "machine": "linux",
       "details": {
         "state": "retrying"
       }
@@ -192,5 +192,5 @@
     ]
   ],
   "honcho_peers": [],
-  "collected_at": "2026-05-17T16:27:46.246430"
+  "collected_at": "2026-05-17T18:20:31.619352"
 }
