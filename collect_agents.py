@@ -141,14 +141,34 @@ def parse_gateway_state(path):
     return result
 
 
+def is_wsl():
+    """Detect if running inside Windows Subsystem for Linux.
+    WSL masquerades as Linux — but the actual host OS is Windows."""
+    # Primary check: WSLInterop file is a dead giveaway
+    if Path("/proc/sys/fs/binfmt_misc/WSLInterop").exists():
+        return True
+    # WSL2: check /proc/version for Microsoft kernel
+    try:
+        version = Path("/proc/version").read_text()
+        if "microsoft" in version.lower() or "wsl" in version.lower():
+            return True
+    except Exception:
+        pass
+    # WSL distro name env var
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return True
+    return False
+
+
 def detect_machine():
     hostname = socket.gethostname()
-    os_name = platform.system()
     # Try to get a clean hostname
     try:
         clean = socket.gethostname().split(".")[0]
     except Exception:
         clean = hostname
+    # WSL runs on Windows — report the real host OS
+    os_name = "Windows" if is_wsl() else platform.system()
     return {"hostname": clean, "os": os_name}
 
 
@@ -180,6 +200,13 @@ def collect(machine_tag=None, default_name=None):
     machine = detect_machine()
     if machine_tag:
         machine["tag"] = machine_tag
+        # Override OS based on explicit machine tag.
+        # On WSL, detect_machine() returns "Windows" — but if the caller
+        # passes --machine linux, this is the Linux-side collection and
+        # should report "Linux" as its node OS identity.
+        os_map = {"win": "Windows", "mac": "Darwin", "linux": "Linux"}
+        if machine_tag in os_map:
+            machine["os"] = os_map[machine_tag]
 
     # Parse shared configs
     honcho = parse_honcho(HERMES_HOME / "honcho.json")

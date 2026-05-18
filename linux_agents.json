@@ -1,11 +1,11 @@
 {
   "machine": {
-    "hostname": "ubuntu-4gb-hil-1",
+    "hostname": "Cyberspace-Seven",
     "os": "Linux",
     "tag": "linux"
   },
   "gateway": {
-    "pid": 6169,
+    "pid": 681069,
     "state": "running"
   },
   "agents": {
@@ -17,7 +17,7 @@
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "machine": "ubuntu-4gb-hil-1",
+        "machine": "Cyberspace-Seven",
         "os": "Linux",
         "home": "~/.hermes"
       }
@@ -25,29 +25,48 @@
     "gateway": {
       "id": "gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 6169",
+      "sublabel": "PID 681069",
       "type": "infra",
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "pid": 6169,
+        "pid": 681069,
         "gateway_state": "running",
         "home": "~/.hermes"
       }
     },
-    "silveroak": {
-      "id": "silveroak",
-      "label": "Silveroak",
+    "ares": {
+      "id": "ares",
+      "label": "Ares",
       "sublabel": "profile",
       "type": "agent",
-      "color": "#00e5ff",
+      "color": "#e055ff",
       "machine": "linux",
       "details": {
-        "model": "xiaomi/mimo-v2.5-pro",
-        "provider": "openrouter",
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "nous",
         "voice": "",
         "role": "",
-        "home": "~/.hermes/profiles/silveroak",
+        "home": "~/.hermes/profiles/ares",
+        "toolsets": [
+          "hermes-cli"
+        ],
+        "platforms": []
+      }
+    },
+    "caac": {
+      "id": "caac",
+      "label": "Caac",
+      "sublabel": "profile",
+      "type": "agent",
+      "color": "#ff6b6b",
+      "machine": "linux",
+      "details": {
+        "model": "deepseek/deepseek-v4-flash",
+        "provider": "nous",
+        "voice": "",
+        "role": "",
+        "home": "~/.hermes/profiles/caac",
         "toolsets": [
           "hermes-cli"
         ],
@@ -71,19 +90,42 @@
           "hermes-cli"
         ],
         "platforms": [
-          "discord"
+          "telegram",
+          "webhook"
         ]
       }
     },
-    "discord": {
-      "id": "discord",
-      "label": "Discord",
+    "telegram": {
+      "id": "telegram",
+      "label": "Telegram",
       "sublabel": "connected",
       "type": "service",
       "color": "#4d8bff",
       "machine": "linux",
       "details": {
         "state": "connected"
+      }
+    },
+    "webhook": {
+      "id": "webhook",
+      "label": "Webhook",
+      "sublabel": "connected",
+      "type": "service",
+      "color": "#4d8bff",
+      "machine": "linux",
+      "details": {
+        "state": "connected"
+      }
+    },
+    "discord": {
+      "id": "discord",
+      "label": "Discord",
+      "sublabel": "paused",
+      "type": "service",
+      "color": "#666",
+      "machine": "linux",
+      "details": {
+        "state": "paused"
       }
     }
   },
@@ -102,12 +144,24 @@
     ],
     [
       "CLU",
-      "silveroak",
+      "ares",
       "honcho",
       "#ffd700"
     ],
     [
-      "silveroak",
+      "CLU",
+      "caac",
+      "honcho",
+      "#ffd700"
+    ],
+    [
+      "ares",
+      "host",
+      "sibling",
+      "#444"
+    ],
+    [
+      "caac",
       "host",
       "sibling",
       "#444"
@@ -117,6 +171,18 @@
       "host",
       "sibling",
       "#444"
+    ],
+    [
+      "CLU",
+      "telegram",
+      "platform",
+      "#4d8bff"
+    ],
+    [
+      "CLU",
+      "webhook",
+      "platform",
+      "#4d8bff"
     ],
     [
       "CLU",
@@ -126,5 +192,5 @@
     ]
   ],
   "honcho_peers": [],
-  "collected_at": "2026-05-18T03:48:26.927025"
+  "collected_at": "2026-05-17T20:56:04.220752"
 }
