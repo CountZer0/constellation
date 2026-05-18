@@ -14,8 +14,8 @@
 set -euo pipefail
 
 REPO_DIR="${HOME}/.hermes/constellation"
-MACHINE="${1:-mac}"           # Pass 'win' on Windows machines
-DEFAULT_NAME="${2:-Count Zer0}" # Pass 'CLU' on Windows
+MACHINE="${1:-linux}"         # Machine tag for this host
+DEFAULT_NAME="${2:-CLU}"      # Default agent name for this host
 
 cd "$REPO_DIR" || { echo "Repo not found at $REPO_DIR"; exit 1; }
 

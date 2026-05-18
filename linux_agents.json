@@ -5,7 +5,7 @@
     "tag": "linux"
   },
   "gateway": {
-    "pid": 6169,
+    "pid": 14955,
     "state": "running"
   },
   "agents": {
@@ -25,12 +25,12 @@
     "gateway": {
       "id": "gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 6169",
+      "sublabel": "PID 14955",
       "type": "infra",
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "pid": 6169,
+        "pid": 14955,
         "gateway_state": "running",
         "home": "~/.hermes"
       }
@@ -126,5 +126,5 @@
     ]
   ],
   "honcho_peers": [],
-  "collected_at": "2026-05-18T04:29:54.447338"
+  "collected_at": "2026-05-18T19:06:47.969621"
 }
