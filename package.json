@@ -1,0 +1,17 @@
+{
+  "name": "constellation",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "python3 -m unittest discover -s tests -v && npm run test:worker",
+    "test:worker": "node --test worker/test/*.test.js",
+    "worker:dev": "npx wrangler dev --config worker/wrangler.toml",
+    "worker:deploy": "npx wrangler deploy --config worker/wrangler.toml",
+    "d1:migrate:local": "npx wrangler d1 execute constellation --local --file worker/schema.sql --config worker/wrangler.toml",
+    "d1:migrate:remote": "npx wrangler d1 execute constellation --remote --file worker/schema.sql --config worker/wrangler.toml"
+  },
+  "devDependencies": {
+    "wrangler": "^4.93.0"
+  }
+}

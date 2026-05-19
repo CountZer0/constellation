@@ -1,0 +1,17 @@
+name = "constellation-telemetry"
+main = "src/index.js"
+compatibility_date = "2026-05-19"
+workers_dev = true
+
+# Create and bind the database before deploying:
+#   npx wrangler d1 create constellation
+# Then paste the returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "constellation"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# Set secrets with:
+#   npx wrangler secret put CONSTELLATION_SECRETS --config worker/wrangler.toml
+# Value shape:
+#   {"linux":"...","mac":"...","win":"..."}
