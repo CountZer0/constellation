@@ -192,7 +192,7 @@ Create a cron job: run ~/.hermes/constellation/constellation-update.sh every hou
 | Machine | Tag | Hostname | Default Agent | Profiles | File |
 |---------|-----|----------|---------------|----------|------|
 | MacBook Pro | `mac` | Countzer0s-MacBook-Pro | Count Zer0 | buddha, hiro, wintermute | `mac_agents.json` |
-| Win/WSL | `win` | Cyberspace-Seven | CLU | ares, caac | `win_agents.json` |
+| Win/WSL | `win` | Cyberspace-Seven | TRON | ares, caac | `win_agents.json` |
 | Linux server | `linux` | ubuntu-4gb-hil-1 | CLU | silveroak | `linux_agents.json` |
 
 ## Adding a New Machine
