@@ -126,6 +126,12 @@
       "#4d8bff"
     ]
   ],
-  "honcho_peers": [],
-  "collected_at": "2026-05-19T12:00:19.858180"
+  "honcho_peers": [
+    {
+      "peer": "CLU",
+      "workspace": "hermes",
+      "host_key": "hermes"
+    }
+  ],
+  "collected_at": "2026-05-19T13:00:02.362632"
 }
