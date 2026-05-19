@@ -9,7 +9,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "constellation"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "bae242c9-9409-4d1d-81b9-736d021c4e97"
 
 # Set secrets with:
 #   npx wrangler secret put CONSTELLATION_SECRETS --config worker/wrangler.toml
