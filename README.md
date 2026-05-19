@@ -54,6 +54,63 @@ Each machine runs `constellation-update.sh` on a cron (hourly). The script:
 
 This means each machine only needs to know its own config — the repo carries the other machines' data between them.
 
+## Phase 1 Stabilization Contract
+
+The current git-based sync is transitional. Phase 1 makes it safer and more observable before replacing it with a central telemetry service.
+
+### Snapshot metadata
+
+Every machine snapshot now includes:
+
+```json
+{
+  "schema_version": 1,
+  "machine": { "tag": "linux", "hostname": "ubuntu-4gb-hil-1", "os": "Linux" },
+  "collected_at": "2026-05-19T10:46:18.692327"
+}
+```
+
+### Merged graph metadata
+
+`agents.json` now includes:
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-19T10:46:18.740029+00:00",
+  "machines": [
+    {
+      "tag": "linux",
+      "hostname": "ubuntu-4gb-hil-1",
+      "last_seen_at": "2026-05-19T10:46:18.692327",
+      "age_seconds": 0,
+      "status": "online"
+    }
+  ]
+}
+```
+
+### Status rules
+
+Machine snapshots are not deleted when they stop reporting. They remain visible with degraded status:
+
+| Status | Rule | Display |
+|--------|------|---------|
+| `online` | last seen under 10 minutes ago | normal machine color |
+| `stale` | last seen 10–59 minutes ago | yellow |
+| `offline` | last seen 60+ minutes ago | dim/gray |
+| `unknown` | missing/invalid timestamp | unknown |
+
+All machine-owned nodes receive `details.machine_status`, `details.machine_age_seconds`, and `details.machine_last_seen_at` so the frontend can show state in the graph and detail panel.
+
+### Verification
+
+Run the unit tests before committing merge/collector changes:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
 ## Setup
 
 ### 1. Clone the repo

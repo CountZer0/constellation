@@ -361,6 +361,7 @@ def collect(machine_tag=None, default_name=None):
             edges.append([default_id, peer_name, "cross-mesh", "#ff8c00"])
 
     return {
+        "schema_version": 1,
         "machine": machine,
         "gateway": {"pid": gw_pid, "state": gw_state},
         "agents": {**infra, **agents, **services},

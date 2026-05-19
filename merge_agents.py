@@ -4,21 +4,84 @@ Merge machine-specific agent JSON files into a single agents.json
 for the constellation visualization.
 
 Usage:
-  python3 merge_agents.py mac_agents.json win_agents.json -o agents.json
+  python3 merge_agents.py mac_agents.json win_agents.json linux_agents.json -o agents.json
 """
 
 import argparse
+import copy
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Services that are NOT scoped per-machine (shared external services)
 SHARED_SERVICES = {"telegram", "discord", "slack", "whatsapp", "signal", "mattermost", "matrix", "webhook"}
+SCHEMA_VERSION = 1
+STALE_AFTER_SECONDS = 10 * 60
+OFFLINE_AFTER_SECONDS = 60 * 60
 
 
-def merge(data_list):
-    """Merge multiple machine data files into one constellation dataset."""
+def _parse_timestamp(value):
+    """Parse ISO-ish timestamps from collectors. Return aware UTC datetime or None."""
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip()
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _iso(dt):
+    return dt.astimezone(timezone.utc).isoformat()
+
+
+def _machine_status(collected_at, now):
+    seen = _parse_timestamp(collected_at)
+    if seen is None:
+        return "unknown", None
+    age = max(0, int((now - seen).total_seconds()))
+    if age >= OFFLINE_AFTER_SECONDS:
+        return "offline", age
+    if age >= STALE_AFTER_SECONDS:
+        return "stale", age
+    return "online", age
+
+
+def _annotate_node(agent, status, age_seconds, last_seen_at):
+    node = copy.deepcopy(agent)
+    details = node.setdefault("details", {})
+    details["machine_status"] = status
+    details["machine_age_seconds"] = age_seconds
+    details["machine_last_seen_at"] = last_seen_at
+    return node
+
+
+def merge(data_list, now=None):
+    """Merge multiple machine data files into one constellation dataset.
+
+    Phase 1 metadata contract:
+    - top-level schema_version and generated_at
+    - each machine includes last_seen_at, age_seconds, and status
+    - stale/offline machines remain visible
+    - all machine-owned nodes include status details for frontend styling
+    """
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    now = now.astimezone(timezone.utc)
+
     merged = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": _iso(now),
         "machines": [],
         "agents": {},
         "edges": [],
@@ -27,36 +90,50 @@ def merge(data_list):
 
     machine_defaults = {}
 
-    for data in data_list:
+    for original in data_list:
+        data = copy.deepcopy(original)
         machine = data.get("machine", {})
         machine_tag = machine.get("tag", machine.get("hostname", "unknown"))
+        collected_at = data.get("collected_at")
+        status, age_seconds = _machine_status(collected_at, now)
+
         merged["machines"].append({
             "tag": machine_tag,
             "hostname": machine.get("hostname", ""),
             "os": machine.get("os", ""),
+            "last_seen_at": collected_at,
+            "age_seconds": age_seconds,
+            "status": status,
         })
 
-        gw = data.get("gateway", {})
+        gw = copy.deepcopy(data.get("gateway", {}))
+        gw["last_seen_at"] = collected_at
+        gw["age_seconds"] = age_seconds
+        gw["status"] = status
         merged["gateway"][machine_tag] = gw
 
         # Merge agents — scope ALL non-service nodes per machine
         for agent_id, agent in data.get("agents", {}).items():
             if agent_id in SHARED_SERVICES:
-                # Services are shared — use bare ID, last writer wins (fine for now)
-                merged["agents"][agent_id] = agent
+                # Services are shared — use bare ID, latest writer wins for now.
+                service = _annotate_node(agent, status, age_seconds, collected_at)
+                merged["agents"][agent_id] = service
                 continue
 
             # Scope infra and agent nodes per machine
             scoped_id = f"{machine_tag}_{agent_id}"
-            agent["machine"] = machine_tag
-            agent["id"] = scoped_id  # Update ID to match the scoped key
-            merged["agents"][scoped_id] = agent
+            scoped_agent = _annotate_node(agent, status, age_seconds, collected_at)
+            scoped_agent["machine"] = machine_tag
+            scoped_agent["id"] = scoped_id
+            merged["agents"][scoped_id] = scoped_agent
 
             if agent.get("sublabel") == "[default]":
                 machine_defaults[machine_tag] = scoped_id
 
         # Merge edges — scope non-service node references
         for edge in data.get("edges", []):
+            if len(edge) < 4:
+                continue
             from_id, to_id = edge[0], edge[1]
 
             if from_id not in SHARED_SERVICES:

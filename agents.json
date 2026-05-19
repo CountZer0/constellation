@@ -1,19 +1,30 @@
 {
+  "schema_version": 1,
+  "generated_at": "2026-05-19T10:46:18.740029+00:00",
   "machines": [
     {
       "tag": "linux",
       "hostname": "ubuntu-4gb-hil-1",
-      "os": "Linux"
+      "os": "Linux",
+      "last_seen_at": "2026-05-19T10:46:18.703623",
+      "age_seconds": 0,
+      "status": "online"
     },
     {
       "tag": "mac",
       "hostname": "Countzer0s-MacBook-Pro",
-      "os": "Darwin"
+      "os": "Darwin",
+      "last_seen_at": "2026-05-17T14:04:20.170669",
+      "age_seconds": 160918,
+      "status": "offline"
     },
     {
       "tag": "win",
       "hostname": "Cyberspace-Seven",
-      "os": "Windows"
+      "os": "Windows",
+      "last_seen_at": "2026-05-17T20:58:59.916089",
+      "age_seconds": 136038,
+      "status": "offline"
     }
   ],
   "agents": {
@@ -27,20 +38,26 @@
       "details": {
         "machine": "ubuntu-4gb-hil-1",
         "os": "Linux",
-        "home": "~/.hermes"
+        "home": "~/.hermes",
+        "machine_status": "online",
+        "machine_age_seconds": 0,
+        "machine_last_seen_at": "2026-05-19T10:46:18.703623"
       }
     },
     "linux_gateway": {
       "id": "linux_gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 14955",
+      "sublabel": "PID 23321",
       "type": "infra",
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "pid": 14955,
+        "pid": 23321,
         "gateway_state": "running",
-        "home": "~/.hermes"
+        "home": "~/.hermes",
+        "machine_status": "online",
+        "machine_age_seconds": 0,
+        "machine_last_seen_at": "2026-05-19T10:46:18.703623"
       }
     },
     "linux_silveroak": {
@@ -59,7 +76,10 @@
         "toolsets": [
           "hermes-cli"
         ],
-        "platforms": []
+        "platforms": [],
+        "machine_status": "online",
+        "machine_age_seconds": 0,
+        "machine_last_seen_at": "2026-05-19T10:46:18.703623"
       }
     },
     "linux_CLU": {
@@ -80,7 +100,10 @@
         ],
         "platforms": [
           "discord"
-        ]
+        ],
+        "machine_status": "online",
+        "machine_age_seconds": 0,
+        "machine_last_seen_at": "2026-05-19T10:46:18.703623"
       }
     },
     "discord": {
@@ -91,7 +114,10 @@
       "color": "#666",
       "machine": "win",
       "details": {
-        "state": "paused"
+        "state": "paused",
+        "machine_status": "offline",
+        "machine_age_seconds": 136038,
+        "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
     "mac_host": {
@@ -104,7 +130,10 @@
       "details": {
         "machine": "Countzer0s-MacBook-Pro",
         "os": "Darwin",
-        "home": "~/.hermes"
+        "home": "~/.hermes",
+        "machine_status": "offline",
+        "machine_age_seconds": 160918,
+        "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
     "mac_gateway": {
@@ -117,7 +146,10 @@
       "details": {
         "pid": 81213,
         "gateway_state": "running",
-        "home": "~/.hermes"
+        "home": "~/.hermes",
+        "machine_status": "offline",
+        "machine_age_seconds": 160918,
+        "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
     "mac_buddha": {
@@ -136,7 +168,10 @@
         "toolsets": [
           "hermes-cli"
         ],
-        "platforms": []
+        "platforms": [],
+        "machine_status": "offline",
+        "machine_age_seconds": 160918,
+        "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
     "mac_hiro": {
@@ -159,7 +194,10 @@
           "file",
           "web"
         ],
-        "platforms": []
+        "platforms": [],
+        "machine_status": "offline",
+        "machine_age_seconds": 160918,
+        "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
     "mac_wintermute": {
@@ -181,7 +219,10 @@
           "image_gen",
           "browser"
         ],
-        "platforms": []
+        "platforms": [],
+        "machine_status": "offline",
+        "machine_age_seconds": 160918,
+        "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
     "mac_Count Zer0": {
@@ -208,7 +249,10 @@
         ],
         "platforms": [
           "telegram"
-        ]
+        ],
+        "machine_status": "offline",
+        "machine_age_seconds": 160918,
+        "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
     "telegram": {
@@ -219,7 +263,10 @@
       "color": "#4d8bff",
       "machine": "win",
       "details": {
-        "state": "connected"
+        "state": "connected",
+        "machine_status": "offline",
+        "machine_age_seconds": 136038,
+        "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
     "win_host": {
@@ -232,7 +279,10 @@
       "details": {
         "machine": "Cyberspace-Seven",
         "os": "Windows",
-        "home": "~/.hermes"
+        "home": "~/.hermes",
+        "machine_status": "offline",
+        "machine_age_seconds": 136038,
+        "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
     "win_gateway": {
@@ -245,7 +295,10 @@
       "details": {
         "pid": 681069,
         "gateway_state": "running",
-        "home": "~/.hermes"
+        "home": "~/.hermes",
+        "machine_status": "offline",
+        "machine_age_seconds": 136038,
+        "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
     "win_ares": {
@@ -264,7 +317,10 @@
         "toolsets": [
           "hermes-cli"
         ],
-        "platforms": []
+        "platforms": [],
+        "machine_status": "offline",
+        "machine_age_seconds": 136038,
+        "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
     "win_caac": {
@@ -283,7 +339,10 @@
         "toolsets": [
           "hermes-cli"
         ],
-        "platforms": []
+        "platforms": [],
+        "machine_status": "offline",
+        "machine_age_seconds": 136038,
+        "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
     "win_CLU": {
@@ -305,7 +364,10 @@
         "platforms": [
           "telegram",
           "webhook"
-        ]
+        ],
+        "machine_status": "offline",
+        "machine_age_seconds": 136038,
+        "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
     "webhook": {
@@ -316,7 +378,10 @@
       "color": "#4d8bff",
       "machine": "win",
       "details": {
-        "state": "connected"
+        "state": "connected",
+        "machine_status": "offline",
+        "machine_age_seconds": 136038,
+        "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     }
   },
@@ -498,16 +563,25 @@
   ],
   "gateway": {
     "linux": {
-      "pid": 14955,
-      "state": "running"
+      "pid": 23321,
+      "state": "running",
+      "last_seen_at": "2026-05-19T10:46:18.703623",
+      "age_seconds": 0,
+      "status": "online"
     },
     "mac": {
       "pid": 81213,
-      "state": "running"
+      "state": "running",
+      "last_seen_at": "2026-05-17T14:04:20.170669",
+      "age_seconds": 160918,
+      "status": "offline"
     },
     "win": {
       "pid": 681069,
-      "state": "running"
+      "state": "running",
+      "last_seen_at": "2026-05-17T20:58:59.916089",
+      "age_seconds": 136038,
+      "status": "offline"
     }
   }
 }
