@@ -26,71 +26,35 @@ Machine A (Mac)         Machine B (Win/WSL)        Machine C (Linux)
 │   gateway_state  │     │   gateway_state  │        │   gateway_state  │
 │   profiles/*     │     │   profiles/*     │        │   profiles/*     │
 └────────┬────────┘     └────────┬────────┘        └────────┬────────┘
-         │ writes                │ writes                    │ writes
+         │ POST                  │ POST                      │ POST
          ▼                       ▼                           ▼
-   mac_agents.json         win_agents.json           linux_agents.json
-         │                       │                           │
-         └───────────────────────┼───────────────────────────┘
-                                 │ merge_agents.py
-                                 ▼
-                           agents.json
+   ┌─────────────────────────────────────────────────────────────┐
+   │            Cloudflare Worker + D1 (telemetry)               │
+   │         constellation-telemetry.count-zr0.workers.dev       │
+   └─────────────────────────────────────────────────────────────┘
                                  │
                                  ▼
-                      GitHub Actions Pages
+                          GET /agents.json
                                  │
                                  ▼
-                    https://countzer0.github.io/constellation/
+   GitHub Pages (static frontend)
+   https://countzer0.github.io/constellation/
 ```
 
 ## How Updates Flow
 
-Each machine runs `constellation-update.sh` on a cron (hourly). The script:
+Each machine runs `constellation-post.sh` on a cron (hourly). The script:
 
-1. **Pulls** the latest from `origin/main` (picks up other machines' recent updates)
-2. **Collects** local agent data into `<machine>_agents.json` (only overwrites its own file)
-3. **Merges** all `*_agents.json` files into `agents.json`
-4. **Commits and pushes** to `main`
-5. GitHub Actions deploys the updated page automatically
+1. **Collects** local agent data from Hermes configs
+2. **Validates** the snapshot against the schema
+3. **Signs** the payload with HMAC-SHA256 (per-machine secret)
+4. **POSTs** the snapshot to the Cloudflare Worker
+5. Worker **upserts** into D1 (`latest_snapshots` + `snapshot_events`)
+6. Frontend fetches `GET /agents.json` from the Worker (server-side merge)
 
-This means each machine only needs to know its own config — the repo carries the other machines' data between them.
+Each machine only knows its own config and secret. The Worker owns the merge.
 
-## Phase 1 Stabilization Contract
-
-The current git-based sync is transitional. Phase 1 makes it safer and more observable before replacing it with a central telemetry service.
-
-### Snapshot metadata
-
-Every machine snapshot now includes:
-
-```json
-{
-  "schema_version": 1,
-  "machine": { "tag": "linux", "hostname": "ubuntu-4gb-hil-1", "os": "Linux" },
-  "collected_at": "2026-05-19T10:46:18.692327"
-}
-```
-
-### Merged graph metadata
-
-`agents.json` now includes:
-
-```json
-{
-  "schema_version": 1,
-  "generated_at": "2026-05-19T10:46:18.740029+00:00",
-  "machines": [
-    {
-      "tag": "linux",
-      "hostname": "ubuntu-4gb-hil-1",
-      "last_seen_at": "2026-05-19T10:46:18.692327",
-      "age_seconds": 0,
-      "status": "online"
-    }
-  ]
-}
-```
-
-### Status rules
+## Status Rules
 
 Machine snapshots are not deleted when they stop reporting. They remain visible with degraded status:
 
@@ -101,75 +65,127 @@ Machine snapshots are not deleted when they stop reporting. They remain visible 
 | `offline` | last seen 60+ minutes ago | dim/gray |
 | `unknown` | missing/invalid timestamp | unknown |
 
-All machine-owned nodes receive `details.machine_status`, `details.machine_age_seconds`, and `details.machine_last_seen_at` so the frontend can show state in the graph and detail panel.
+## Machine Reference
 
-### Verification
+| Machine | Tag | Hostname | Default Agent | Profiles |
+|---------|-----|----------|---------------|----------|
+| MacBook Pro | `mac` | Countzer0s-MacBook-Pro | Count Zer0 | buddha, hiro, wintermute |
+| Win/WSL | `win` | Cyberspace-Seven | TRON | ares, caac |
+| Linux server | `linux` | ubuntu-4gb-hil-1 | CLU | silveroak |
 
-Run the unit tests before committing merge/collector changes:
+---
 
-```bash
-python3 -m unittest discover -s tests -v
-```
+## Setup — Deploying the Worker (one-time)
 
-## Phase 2 Telemetry Contract
+The Cloudflare Worker is the central telemetry authority. Deploy it once, then each machine just POSTs to it.
 
-Phase 2 introduces a post-only client and API contract. It does **not** replace the current cron until an endpoint is deployed and verified.
+### Prerequisites
 
-Files:
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
+- Node.js 20+ on the deploy machine
+- `wrangler` CLI (installed via `npm install` in this repo)
 
-- `docs/telemetry-api.md` — ingestion API, HMAC signing, cutover rules
-- `schemas/snapshot.schema.json` — canonical snapshot schema
-- `validate_snapshot.py` — local stdlib validator
-- `signing.py` — HMAC helper/CLI
-- `constellation-post.sh` — collect → validate → sign → POST client
-
-Example dry collection/validation:
+### 1. Clone and install
 
 ```bash
-python3 collect_agents.py --machine linux --default-name CLU -o /tmp/linux_agents.json
-python3 validate_snapshot.py /tmp/linux_agents.json
+git clone https://github.com/CountZer0/constellation.git ~/.hermes/constellation
+cd ~/.hermes/constellation
+npm install
 ```
 
-Example post-only run once an endpoint exists:
+### 2. Authenticate with Cloudflare
+
+Create an API token at https://dash.cloudflare.com/profile/api-tokens:
+
+- Click **Create Token**
+- Use the **Edit Cloudflare Workers** template
+- Add permission: **Account > D1 > Edit**
+- Under **Account Resources**, select your account
+- Click **Continue to summary** → **Create Token**
+- Copy the token
+
+Set it as an environment variable:
 
 ```bash
-export CONSTELLATION_ENDPOINT="https://constellation-api.example.workers.dev"
-export CONSTELLATION_SECRET="..."
-export CONSTELLATION_MACHINE="linux"
-export CONSTELLATION_DEFAULT_NAME="CLU"
-bash constellation-post.sh
+export CLOUDFLARE_API_TOKEN="<your token>"
 ```
 
-The post-only client deliberately does not run git commands.
-
-## Phase 3 Worker + D1 Authority
-
-Phase 3 adds a Cloudflare Worker scaffold that becomes the central telemetry authority.
-
-Files:
-
-- `worker/src/index.js` — Worker routes, HMAC verification, snapshot validation, D1 writes, server-side merge
-- `worker/schema.sql` — `latest_snapshots` and `snapshot_events` tables
-- `worker/test/worker.test.js` — Node test suite with MockD1
-- `worker/wrangler.toml` — deployment config template
-- `docs/phase3-worker.md` — deployment and cutover guide
-
-Routes:
-
-- `POST /v1/snapshots/:machine`
-- `GET /agents.json`
-- `GET /v1/machines`
-- `GET /v1/health`
-
-Run Phase 3 tests:
+Verify:
 
 ```bash
-npm test
+npx wrangler whoami
 ```
 
-Production cutover is still gated. Do not disable `constellation-update.sh` until the Worker is deployed, all machines can POST, and Worker-backed `/agents.json` matches the Phase 1 graph behavior.
+### 3. Create the D1 database
 
-## Setup
+```bash
+npx wrangler d1 create constellation --config worker/wrangler.toml
+```
+
+Copy the `database_id` from the output and paste it into `worker/wrangler.toml`:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "constellation"
+database_id = "<paste here>"
+```
+
+### 4. Apply the schema
+
+```bash
+npm run d1:migrate:remote
+```
+
+### 5. Generate HMAC secrets
+
+Each machine gets its own secret. Generate three:
+
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Run it three times. Save the outputs — you'll need them for each machine.
+
+### 6. Set the Worker secret
+
+Store all three secrets as a single JSON object:
+
+```bash
+npx wrangler secret put CONSTELLATION_SECRETS --config worker/wrangler.toml
+```
+
+When prompted, paste:
+
+```json
+{"linux":"<linux secret>","mac":"<mac secret>","win":"<win secret>"}
+```
+
+### 7. Deploy
+
+```bash
+npm run worker:deploy
+```
+
+Output will show your Worker URL:
+
+```
+https://constellation-telemetry.<your-subdomain>.workers.dev
+```
+
+### 8. Verify
+
+```bash
+curl https://constellation-telemetry.<your-subdomain>.workers.dev/v1/health
+curl https://constellation-telemetry.<your-subdomain>.workers.dev/v1/machines
+curl https://constellation-telemetry.<your-subdomain>.workers.dev/agents.json
+```
+
+---
+
+## Setup — Configuring Each Machine
+
+Each machine needs: the repo, its HMAC secret, and a cron job.
 
 ### 1. Clone the repo
 
@@ -178,96 +194,199 @@ git clone https://github.com/CountZer0/constellation.git ~/.hermes/constellation
 cd ~/.hermes/constellation
 ```
 
-### 2. Configure for this machine
+### 2. Get the HMAC secret for this machine
 
-Edit `constellation-update.sh` — set the defaults at the top:
+The secrets were generated during Worker deployment. To retrieve them, the person who deployed the Worker can:
 
-```bash
-MACHINE="${1:-linux}"         # mac, win, or linux
-DEFAULT_NAME="${2:-CLU}"      # Your default agent's display name
-```
+**Option A:** Check the deploy machine's shell history (the secret was printed during `python3 -c "import secrets; ..."`).
 
-### 3. Test it manually
+**Option B:** Re-generate and update. On the deploy machine:
 
 ```bash
-bash constellation-update.sh
+# Generate a new secret
+python3 -c "import secrets; print(secrets.token_hex(32))"
+
+# Update the Worker's secret store
+npx wrangler secret put CONSTELLATION_SECRETS --config worker/wrangler.toml
+# Paste the full JSON with the updated secret for this machine
 ```
 
-This will:
-- Collect your machine's data into `<machine>_agents.json`
-- Merge all available machine files into `agents.json`
-- Commit and push if there are changes
+**Option C:** If you have `CLOUDFLARE_API_TOKEN` access, read the secret JSON:
+
+```bash
+npx wrangler secret list --config worker/wrangler.toml
+# Then use the Cloudflare dashboard to view the secret value
+```
+
+### 3. Test the post
+
+```bash
+export CONSTELLATION_ENDPOINT="https://constellation-telemetry.<your-subdomain>.workers.dev"
+export CONSTELLATION_SECRET="<this machine's secret>"
+export CONSTELLATION_MACHINE="linux"    # or "mac" or "win"
+export CONSTELLATION_DEFAULT_NAME="CLU" # or "Count Zer0" for mac
+bash constellation-post.sh
+```
+
+Verify the data landed:
+
+```bash
+curl "$CONSTELLATION_ENDPOINT/v1/machines"
+```
 
 ### 4. Set up the cron job
 
-**Option A: System crontab (recommended)**
+**System crontab (recommended):**
 
 ```bash
-# Hourly update
-(crontab -l 2>/dev/null; echo '0 * * * * /bin/bash ~/.hermes/constellation/constellation-update.sh >> /tmp/constellation-update.log 2>&1') | crontab -
+crontab -e
 ```
 
-**Option B: Hermes cron**
+Add:
+
+```
+0 * * * * CONSTELLATION_ENDPOINT="https://constellation-telemetry.<your-subdomain>.workers.dev" CONSTELLATION_SECRET="<this machine's secret>" CONSTELLATION_MACHINE="linux" CONSTELLATION_DEFAULT_NAME="CLU" /bin/bash ~/.hermes/constellation/constellation-post.sh >> /tmp/constellation-post.log 2>&1
+```
+
+Adjust `CONSTELLATION_MACHINE` and `CONSTELLATION_DEFAULT_NAME` per machine (see Machine Reference above).
+
+**Hermes cron:**
 
 In a Hermes session:
 ```
-Create a cron job: run ~/.hermes/constellation/constellation-update.sh every hour
+Create a cron job: run constellation-post.sh every hour with env vars CONSTELLATION_ENDPOINT and CONSTELLATION_SECRET set
 ```
 
-## Machine Reference
+---
 
-| Machine | Tag | Hostname | Default Agent | Profiles | File |
-|---------|-----|----------|---------------|----------|------|
-| MacBook Pro | `mac` | Countzer0s-MacBook-Pro | Count Zer0 | buddha, hiro, wintermute | `mac_agents.json` |
-| Win/WSL | `win` | Cyberspace-Seven | TRON | ares, caac | `win_agents.json` |
-| Linux server | `linux` | ubuntu-4gb-hil-1 | CLU | silveroak | `linux_agents.json` |
+## Setup — Frontend
+
+The GitHub Pages frontend loads `index.html` which fetches `agents.json`.
+
+### Point the frontend at the Worker
+
+Edit `index.html` — find this line:
+
+```javascript
+const resp = await fetch('agents.json', { cache: 'no-cache' });
+```
+
+Change it to:
+
+```javascript
+const resp = await fetch('https://constellation-telemetry.<your-subdomain>.workers.dev/agents.json', { cache: 'no-cache' });
+```
+
+Commit and push. GitHub Actions will redeploy Pages.
+
+---
 
 ## Adding a New Machine
 
-1. Clone the repo on the new machine:
-   ```bash
-   git clone https://github.com/CountZer0/constellation.git ~/.hermes/constellation
-   ```
-2. Edit `constellation-update.sh` — set `MACHINE` and `DEFAULT_NAME`
-3. Run `bash constellation-update.sh` to test
-4. Set up the crontab (see above)
-
-The new machine's data will automatically appear in the merged `agents.json` on next push.
+1. Clone the repo on the new machine
+2. Generate a new HMAC secret: `python3 -c "import secrets; print(secrets.token_hex(32))"`
+3. Update the Worker secret: `npx wrangler secret put CONSTELLATION_SECRETS` (on any machine with `CLOUDFLARE_API_TOKEN`)
+4. Test: `bash constellation-post.sh`
+5. Set up crontab
 
 ## Adding a New Agent (Profile)
 
 1. Create a profile directory: `~/.hermes/profiles/myagent/`
 2. Add `SOUL.md` with identity info (Name, Title, Voice, Role)
 3. Add `config.yaml` with model/provider settings
-4. Re-run `bash constellation-update.sh` — the collector auto-discovers profiles
+4. Re-run `bash constellation-post.sh` — the collector auto-discovers profiles
 
-## GitHub Pages Setup
+---
 
-Already configured via `.github/workflows/pages.yml`. Every push to `main` triggers a deploy.
+## Development
 
-1. Go to repo Settings → Pages
-2. Source: "GitHub Actions"
-3. Done — live at `https://countzer0.github.io/constellation/`
+### Run all tests
+
+```bash
+npm test
+```
+
+This runs both Python tests (collector, merge, signing, validation) and Node tests (Worker routes, D1 persistence, merge logic).
+
+### Worker tests only
+
+```bash
+npm run test:worker
+```
+
+### Python tests only
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+### Local Worker development
+
+```bash
+npm run worker:dev
+```
+
+### Local D1 migration
+
+```bash
+npm run d1:migrate:local
+```
+
+---
+
+## API Reference
+
+### POST /v1/snapshots/:machine
+
+Accepts a signed machine snapshot.
+
+Required headers:
+
+```http
+Content-Type: application/json
+X-Constellation-Machine: <machine tag>
+X-Constellation-Timestamp: <ISO 8601 UTC>
+X-Constellation-Signature: sha256=<hex>
+```
+
+The signature is HMAC-SHA256 of:
+
+```
+<timestamp>\n<machine_id>\n<sha256(body)>
+```
+
+### GET /agents.json
+
+Returns the canonical merged graph with all machines, agents, edges, and freshness status.
+
+### GET /v1/machines
+
+Returns a list of machines with their last-seen timestamps and status.
+
+### GET /v1/health
+
+Returns service health.
+
+---
 
 ## File Reference
 
 | File | Purpose |
 |------|---------|
 | `collect_agents.py` | Reads local Hermes configs, outputs machine-specific JSON |
-| `merge_agents.py` | Merges multiple machine JSON files into one `agents.json` |
-| `constellation-update.sh` | Phase 1 all-in-one: collect → merge → commit → push |
-| `constellation-post.sh` | Phase 2 post-only client: collect → validate → sign → POST |
-| `validate_snapshot.py` | Stdlib snapshot validator for local and CI use |
+| `merge_agents.py` | Legacy: merges machine JSON files into `agents.json` |
+| `constellation-update.sh` | Legacy git-based: collect → merge → commit → push |
+| `constellation-post.sh` | Telemetry client: collect → validate → sign → POST |
+| `validate_snapshot.py` | Stdlib snapshot validator |
 | `signing.py` | HMAC-SHA256 signing helper and CLI |
 | `schemas/snapshot.schema.json` | Canonical machine snapshot schema |
-| `docs/telemetry-api.md` | Phase 2 telemetry ingestion contract |
-| `docs/phase3-worker.md` | Phase 3 Cloudflare Worker + D1 deployment guide |
+| `docs/telemetry-api.md` | Telemetry ingestion contract |
+| `docs/phase3-worker.md` | Cloudflare Worker + D1 deployment guide |
 | `worker/src/index.js` | Cloudflare Worker telemetry authority |
 | `worker/schema.sql` | D1 database schema |
-| `worker/wrangler.toml` | Wrangler deployment config template |
-| `agents.json` | The merged data source (auto-generated, do not edit) |
-| `index.html` | Interactive visualization (loads `agents.json` at runtime) |
-| `*_agents.json` | Per-machine data (auto-generated by collector) |
+| `worker/wrangler.toml` | Wrangler deployment config |
+| `index.html` | Interactive visualization frontend |
+| `*_agents.json` | Per-machine data (legacy, auto-generated) |
 
 ## CLI Reference
 
@@ -282,13 +401,16 @@ Options:
   -o, --output      Output file path (default: stdout)
 ```
 
-### merge_agents.py
+### signing.py
 
 ```
-python3 merge_agents.py INPUT1 INPUT2 [INPUT3 ...] [OPTIONS]
+python3 signing.py --secret SECRET --timestamp TIMESTAMP --machine MACHINE --body FILE
+```
 
-Options:
-  -o, --output      Output file path (default: stdout)
+### validate_snapshot.py
+
+```
+python3 validate_snapshot.py <machine>_agents.json
 ```
 
 ## Customization
