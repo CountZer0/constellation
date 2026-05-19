@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://countzer0.github.io/constellation/schemas/snapshot.schema.json",
+  "title": "Constellation Machine Snapshot",
+  "type": "object",
+  "required": ["schema_version", "machine", "gateway", "agents", "edges", "collected_at"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "machine": {
+      "type": "object",
+      "required": ["tag", "hostname", "os"],
+      "additionalProperties": true,
+      "properties": {
+        "tag": { "type": "string", "minLength": 1 },
+        "hostname": { "type": "string", "minLength": 1 },
+        "os": { "type": "string", "minLength": 1 }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id", "label", "type"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "sublabel": { "type": "string" },
+          "type": { "enum": ["infra", "agent", "service"] },
+          "color": { "type": "string" },
+          "machine": { "type": "string" },
+          "details": { "type": "object" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "minItems": 4,
+        "maxItems": 4,
+        "items": { "type": "string", "minLength": 1 }
+      }
+    },
+    "honcho_peers": {
+      "type": "array"
+    },
+    "collected_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
