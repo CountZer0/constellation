@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-20T00:00:47.654038+00:00",
+  "generated_at": "2026-05-20T01:00:49.822493+00:00",
   "machines": [
     {
       "tag": "linux",
       "hostname": "ubuntu-4gb-hil-1",
       "os": "Linux",
-      "last_seen_at": "2026-05-20T00:00:47.614751",
+      "last_seen_at": "2026-05-20T01:00:49.788845",
       "age_seconds": 0,
       "status": "online"
     },
@@ -15,7 +15,7 @@
       "hostname": "Countzer0s-MacBook-Pro",
       "os": "Darwin",
       "last_seen_at": "2026-05-17T14:04:20.170669",
-      "age_seconds": 208587,
+      "age_seconds": 212189,
       "status": "offline"
     },
     {
@@ -23,7 +23,7 @@
       "hostname": "Cyberspace-Seven",
       "os": "Windows",
       "last_seen_at": "2026-05-17T20:58:59.916089",
-      "age_seconds": 183707,
+      "age_seconds": 187309,
       "status": "offline"
     }
   ],
@@ -41,7 +41,7 @@
         "home": "~/.hermes",
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-20T00:00:47.614751"
+        "machine_last_seen_at": "2026-05-20T01:00:49.788845"
       }
     },
     "linux_gateway": {
@@ -57,7 +57,7 @@
         "home": "~/.hermes",
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-20T00:00:47.614751"
+        "machine_last_seen_at": "2026-05-20T01:00:49.788845"
       }
     },
     "linux_silveroak": {
@@ -79,7 +79,7 @@
         "platforms": [],
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-20T00:00:47.614751"
+        "machine_last_seen_at": "2026-05-20T01:00:49.788845"
       }
     },
     "linux_CLU": {
@@ -103,7 +103,7 @@
         ],
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-20T00:00:47.614751"
+        "machine_last_seen_at": "2026-05-20T01:00:49.788845"
       }
     },
     "discord": {
@@ -116,7 +116,7 @@
       "details": {
         "state": "paused",
         "machine_status": "offline",
-        "machine_age_seconds": 183707,
+        "machine_age_seconds": 187309,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -132,7 +132,7 @@
         "os": "Darwin",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 208587,
+        "machine_age_seconds": 212189,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -148,7 +148,7 @@
         "gateway_state": "running",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 208587,
+        "machine_age_seconds": 212189,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -170,7 +170,7 @@
         ],
         "platforms": [],
         "machine_status": "offline",
-        "machine_age_seconds": 208587,
+        "machine_age_seconds": 212189,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -196,7 +196,7 @@
         ],
         "platforms": [],
         "machine_status": "offline",
-        "machine_age_seconds": 208587,
+        "machine_age_seconds": 212189,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -221,7 +221,7 @@
         ],
         "platforms": [],
         "machine_status": "offline",
-        "machine_age_seconds": 208587,
+        "machine_age_seconds": 212189,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -251,7 +251,7 @@
           "telegram"
         ],
         "machine_status": "offline",
-        "machine_age_seconds": 208587,
+        "machine_age_seconds": 212189,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -265,7 +265,7 @@
       "details": {
         "state": "connected",
         "machine_status": "offline",
-        "machine_age_seconds": 183707,
+        "machine_age_seconds": 187309,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -281,7 +281,7 @@
         "os": "Windows",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 183707,
+        "machine_age_seconds": 187309,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -297,7 +297,7 @@
         "gateway_state": "running",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 183707,
+        "machine_age_seconds": 187309,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -319,7 +319,7 @@
         ],
         "platforms": [],
         "machine_status": "offline",
-        "machine_age_seconds": 183707,
+        "machine_age_seconds": 187309,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -341,7 +341,7 @@
         ],
         "platforms": [],
         "machine_status": "offline",
-        "machine_age_seconds": 183707,
+        "machine_age_seconds": 187309,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -366,7 +366,7 @@
           "webhook"
         ],
         "machine_status": "offline",
-        "machine_age_seconds": 183707,
+        "machine_age_seconds": 187309,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -380,7 +380,7 @@
       "details": {
         "state": "connected",
         "machine_status": "offline",
-        "machine_age_seconds": 183707,
+        "machine_age_seconds": 187309,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     }
@@ -565,7 +565,7 @@
     "linux": {
       "pid": 34657,
       "state": "running",
-      "last_seen_at": "2026-05-20T00:00:47.614751",
+      "last_seen_at": "2026-05-20T01:00:49.788845",
       "age_seconds": 0,
       "status": "online"
     },
@@ -573,14 +573,14 @@
       "pid": 81213,
       "state": "running",
       "last_seen_at": "2026-05-17T14:04:20.170669",
-      "age_seconds": 208587,
+      "age_seconds": 212189,
       "status": "offline"
     },
     "win": {
       "pid": 681069,
       "state": "running",
       "last_seen_at": "2026-05-17T20:58:59.916089",
-      "age_seconds": 183707,
+      "age_seconds": 187309,
       "status": "offline"
     }
   }
