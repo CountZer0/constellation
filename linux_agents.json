@@ -6,7 +6,7 @@
     "tag": "linux"
   },
   "gateway": {
-    "pid": 1808973,
+    "pid": 2143367,
     "state": "running"
   },
   "agents": {
@@ -26,12 +26,12 @@
     "gateway": {
       "id": "gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 1808973",
+      "sublabel": "PID 2143367",
       "type": "infra",
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "pid": 1808973,
+        "pid": 2143367,
         "gateway_state": "running",
         "home": "~/.hermes"
       }
@@ -121,12 +121,12 @@
     "discord": {
       "id": "discord",
       "label": "Discord",
-      "sublabel": "paused",
+      "sublabel": "retrying",
       "type": "service",
       "color": "#666",
       "machine": "linux",
       "details": {
-        "state": "paused"
+        "state": "retrying"
       }
     }
   },
@@ -216,5 +216,5 @@
       "host_key": "hermes.caac"
     }
   ],
-  "collected_at": "2026-05-20T13:50:20.132213+00:00"
+  "collected_at": "2026-05-20T14:51:18.439134+00:00"
 }
