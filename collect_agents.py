@@ -367,7 +367,7 @@ def collect(machine_tag=None, default_name=None):
         "agents": {**infra, **agents, **services},
         "edges": edges,
         "honcho_peers": honcho,
-        "collected_at": __import__("datetime").datetime.now().isoformat(),
+        "collected_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
     }
 
 
