@@ -6,7 +6,7 @@
     "tag": "linux"
   },
   "gateway": {
-    "pid": 57423,
+    "pid": 119759,
     "state": "running"
   },
   "agents": {
@@ -26,12 +26,12 @@
     "gateway": {
       "id": "gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 57423",
+      "sublabel": "PID 119759",
       "type": "infra",
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "pid": 57423,
+        "pid": 119759,
         "gateway_state": "running",
         "home": "~/.hermes"
       }
@@ -138,5 +138,5 @@
       "host_key": "hermes.silveroak"
     }
   ],
-  "collected_at": "2026-05-20T16:00:17.370803+00:00"
+  "collected_at": "2026-05-20T17:00:12.709826+00:00"
 }
