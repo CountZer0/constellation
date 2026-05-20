@@ -121,12 +121,12 @@
     "discord": {
       "id": "discord",
       "label": "Discord",
-      "sublabel": "retrying",
+      "sublabel": "paused",
       "type": "service",
       "color": "#666",
       "machine": "linux",
       "details": {
-        "state": "retrying"
+        "state": "paused"
       }
     }
   },
@@ -216,5 +216,5 @@
       "host_key": "hermes.caac"
     }
   ],
-  "collected_at": "2026-05-20T14:51:18.439134+00:00"
+  "collected_at": "2026-05-20T15:51:21.941546+00:00"
 }
