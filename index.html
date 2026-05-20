@@ -128,8 +128,11 @@
 
 <script>
 // ═══════════════════════════════════════════════════════
-// DYNAMIC CONSTELLATION — loads from agents.json
+// DYNAMIC CONSTELLATION — loads from Cloudflare Worker
 // ═══════════════════════════════════════════════════════
+
+// Telemetry endpoint — set to '' to load the committed agents.json instead
+const AGENTS_URL = 'https://constellation-telemetry.count-zr0.workers.dev/agents.json' || 'agents.json';
 
 let DATA = null;
 let selectedAgent = null;
@@ -143,7 +146,7 @@ const ctx = canvas.getContext('2d');
 async function loadData(retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
-      const resp = await fetch('agents.json', { cache: 'no-cache' });
+      const resp = await fetch(AGENTS_URL, { cache: 'no-cache' });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       DATA = await resp.json();
       updateHeader();
@@ -500,7 +503,7 @@ setTimeout(loadData, 50);
 // Auto-refresh every 60 seconds
 setInterval(async () => {
   try {
-    const resp = await fetch('agents.json', { cache: 'no-cache' });
+    const resp = await fetch(AGENTS_URL, { cache: 'no-cache' });
     if (!resp.ok) return;
     const fresh = await resp.json();
     // Deep compare agents count to detect changes
