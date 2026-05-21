@@ -6,7 +6,7 @@
     "tag": "linux"
   },
   "gateway": {
-    "pid": 2143367,
+    "pid": 2560375,
     "state": "running"
   },
   "agents": {
@@ -26,12 +26,12 @@
     "gateway": {
       "id": "gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 2143367",
+      "sublabel": "PID 2560375",
       "type": "infra",
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "pid": 2143367,
+        "pid": 2560375,
         "gateway_state": "running",
         "home": "~/.hermes"
       }
@@ -216,5 +216,5 @@
       "host_key": "hermes.caac"
     }
   ],
-  "collected_at": "2026-05-21T11:17:56.250049+00:00"
+  "collected_at": "2026-05-21T12:18:52.952489+00:00"
 }
