@@ -124,19 +124,96 @@
       "discord",
       "platform",
       "#4d8bff"
+    ],
+    [
+      "CLU",
+      "TRON",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Ares",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "CAAC",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Buddha",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Hiro Protagonist",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Wintermute",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Count Zer0",
+      "cross-mesh",
+      "#ff8c00"
     ]
   ],
   "honcho_peers": [
     {
       "peer": "CLU",
-      "workspace": "hermes",
+      "workspace": "hermes.clu",
       "host_key": "hermes"
     },
     {
-      "peer": "silveroak",
+      "peer": "TRON",
       "workspace": "hermes",
-      "host_key": "hermes.silveroak"
+      "host_key": "hermes.tron"
+    },
+    {
+      "peer": "Ares",
+      "workspace": "hermes.ares",
+      "host_key": "hermes.ares"
+    },
+    {
+      "peer": "CAAC",
+      "workspace": "hermes.caac",
+      "host_key": "hermes.caac"
+    },
+    {
+      "peer": "CLU",
+      "workspace": "hermes.clu",
+      "host_key": "hermes.clu"
+    },
+    {
+      "peer": "Buddha",
+      "workspace": "hermes.buddha",
+      "host_key": "hermes.buddha"
+    },
+    {
+      "peer": "Hiro Protagonist",
+      "workspace": "hermes.hiro",
+      "host_key": "hermes.hiro"
+    },
+    {
+      "peer": "Wintermute",
+      "workspace": "hermes.wintermute",
+      "host_key": "hermes.wintermute"
+    },
+    {
+      "peer": "Count Zer0",
+      "workspace": "hermes.countzer0",
+      "host_key": "hermes.countzer0"
     }
   ],
-  "collected_at": "2026-05-23T01:00:21.272188+00:00"
+  "collected_at": "2026-05-23T02:00:22.689883+00:00"
 }
