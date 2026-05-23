@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-23T00:24:22.944010+00:00",
+  "generated_at": "2026-05-23T01:24:25.776593+00:00",
   "machines": [
     {
       "tag": "linux",
       "hostname": "Cyberspace-Seven",
       "os": "Linux",
-      "last_seen_at": "2026-05-23T00:24:22.899159+00:00",
+      "last_seen_at": "2026-05-23T01:24:25.734839+00:00",
       "age_seconds": 0,
       "status": "online"
     },
@@ -15,7 +15,7 @@
       "hostname": "Countzer0s-MacBook-Pro",
       "os": "Darwin",
       "last_seen_at": "2026-05-17T14:04:20.170669",
-      "age_seconds": 469202,
+      "age_seconds": 472805,
       "status": "offline"
     },
     {
@@ -23,7 +23,7 @@
       "hostname": "Cyberspace-Seven",
       "os": "Windows",
       "last_seen_at": "2026-05-17T20:58:59.916089",
-      "age_seconds": 444323,
+      "age_seconds": 447925,
       "status": "offline"
     }
   ],
@@ -41,7 +41,7 @@
         "home": "~/.hermes",
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T00:24:22.899159+00:00"
+        "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
       }
     },
     "linux_gateway": {
@@ -57,7 +57,7 @@
         "home": "~/.hermes",
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T00:24:22.899159+00:00"
+        "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
       }
     },
     "linux_ares": {
@@ -79,7 +79,7 @@
         "platforms": [],
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T00:24:22.899159+00:00"
+        "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
       }
     },
     "linux_caac": {
@@ -101,7 +101,7 @@
         "platforms": [],
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T00:24:22.899159+00:00"
+        "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
       }
     },
     "linux_CLU": {
@@ -126,7 +126,7 @@
         ],
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T00:24:22.899159+00:00"
+        "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
       }
     },
     "telegram": {
@@ -139,7 +139,7 @@
       "details": {
         "state": "connected",
         "machine_status": "offline",
-        "machine_age_seconds": 444323,
+        "machine_age_seconds": 447925,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -153,7 +153,7 @@
       "details": {
         "state": "connected",
         "machine_status": "offline",
-        "machine_age_seconds": 444323,
+        "machine_age_seconds": 447925,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -167,7 +167,7 @@
       "details": {
         "state": "paused",
         "machine_status": "offline",
-        "machine_age_seconds": 444323,
+        "machine_age_seconds": 447925,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -183,7 +183,7 @@
         "os": "Darwin",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 469202,
+        "machine_age_seconds": 472805,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -199,7 +199,7 @@
         "gateway_state": "running",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 469202,
+        "machine_age_seconds": 472805,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -220,8 +220,14 @@
           "hermes-cli"
         ],
         "platforms": [],
+        "honcho": {
+          "peer": "Buddha",
+          "workspace": "hermes.buddha",
+          "host_key": "hermes.buddha",
+          "user_peer": "Countzer0"
+        },
         "machine_status": "offline",
-        "machine_age_seconds": 469202,
+        "machine_age_seconds": 472805,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -246,8 +252,14 @@
           "web"
         ],
         "platforms": [],
+        "honcho": {
+          "peer": "Hiro Protagonist",
+          "workspace": "hermes.hiro",
+          "host_key": "hermes.hiro",
+          "user_peer": "Countzer0"
+        },
         "machine_status": "offline",
-        "machine_age_seconds": 469202,
+        "machine_age_seconds": 472805,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -271,8 +283,14 @@
           "browser"
         ],
         "platforms": [],
+        "honcho": {
+          "peer": "Wintermute",
+          "workspace": "hermes.wintermute",
+          "host_key": "hermes.wintermute",
+          "user_peer": "Countzer0"
+        },
         "machine_status": "offline",
-        "machine_age_seconds": 469202,
+        "machine_age_seconds": 472805,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -301,8 +319,14 @@
         "platforms": [
           "telegram"
         ],
+        "honcho": {
+          "peer": "Count Zer0",
+          "workspace": "hermes.countzer0",
+          "host_key": "hermes.countzer0",
+          "user_peer": "Countzer0"
+        },
         "machine_status": "offline",
-        "machine_age_seconds": 469202,
+        "machine_age_seconds": 472805,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -318,7 +342,7 @@
         "os": "Windows",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 444323,
+        "machine_age_seconds": 447925,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -334,7 +358,7 @@
         "gateway_state": "running",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 444323,
+        "machine_age_seconds": 447925,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -355,8 +379,14 @@
           "hermes-cli"
         ],
         "platforms": [],
+        "honcho": {
+          "peer": "Ares",
+          "workspace": "hermes.ares",
+          "host_key": "hermes.ares",
+          "user_peer": "Countzer0"
+        },
         "machine_status": "offline",
-        "machine_age_seconds": 444323,
+        "machine_age_seconds": 447925,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -377,8 +407,14 @@
           "hermes-cli"
         ],
         "platforms": [],
+        "honcho": {
+          "peer": "CAAC",
+          "workspace": "hermes.caac",
+          "host_key": "hermes.caac",
+          "user_peer": "Countzer0"
+        },
         "machine_status": "offline",
-        "machine_age_seconds": 444323,
+        "machine_age_seconds": 447925,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -402,8 +438,14 @@
           "telegram",
           "webhook"
         ],
+        "honcho": {
+          "peer": "CLU",
+          "workspace": "hermes.clu",
+          "host_key": "hermes.clu",
+          "user_peer": "Countzer0"
+        },
         "machine_status": "offline",
-        "machine_age_seconds": 444323,
+        "machine_age_seconds": 447925,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     }
@@ -471,6 +513,12 @@
     ],
     [
       "linux_CLU",
+      "linux_TRON",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "linux_CLU",
       "linux_Ares",
       "cross-mesh",
       "#ff8c00"
@@ -478,6 +526,30 @@
     [
       "linux_CLU",
       "linux_CAAC",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "linux_CLU",
+      "linux_Buddha",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "linux_CLU",
+      "linux_Hiro Protagonist",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "linux_CLU",
+      "linux_Wintermute",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "linux_CLU",
+      "linux_Count Zer0",
       "cross-mesh",
       "#ff8c00"
     ],
@@ -624,7 +696,7 @@
     "linux": {
       "pid": 201283,
       "state": "running",
-      "last_seen_at": "2026-05-23T00:24:22.899159+00:00",
+      "last_seen_at": "2026-05-23T01:24:25.734839+00:00",
       "age_seconds": 0,
       "status": "online"
     },
@@ -632,15 +704,121 @@
       "pid": 81213,
       "state": "running",
       "last_seen_at": "2026-05-17T14:04:20.170669",
-      "age_seconds": 469202,
+      "age_seconds": 472805,
       "status": "offline"
     },
     "win": {
       "pid": 681069,
       "state": "running",
       "last_seen_at": "2026-05-17T20:58:59.916089",
-      "age_seconds": 444323,
+      "age_seconds": 447925,
       "status": "offline"
     }
-  }
+  },
+  "honcho_peers": [
+    {
+      "peer": "TRON",
+      "workspace": "hermes",
+      "host_key": "hermes",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory",
+      "machine": "linux",
+      "machine_status": "online",
+      "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
+    },
+    {
+      "peer": "Ares",
+      "workspace": "hermes.ares",
+      "host_key": "hermes.ares",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-repo",
+      "machine": "linux",
+      "machine_status": "online",
+      "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
+    },
+    {
+      "peer": "CAAC",
+      "workspace": "hermes.caac",
+      "host_key": "hermes.caac",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "tools",
+      "writeFrequency": "session",
+      "sessionStrategy": "per-session",
+      "machine": "linux",
+      "machine_status": "online",
+      "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
+    },
+    {
+      "peer": "CLU",
+      "workspace": "hermes.clu",
+      "host_key": "hermes.clu",
+      "user_peer": "Countzer0",
+      "enabled": false,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory",
+      "machine": "linux",
+      "machine_status": "online",
+      "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
+    },
+    {
+      "peer": "Buddha",
+      "workspace": "hermes.buddha",
+      "host_key": "hermes.buddha",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory",
+      "machine": "linux",
+      "machine_status": "online",
+      "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
+    },
+    {
+      "peer": "Hiro Protagonist",
+      "workspace": "hermes.hiro",
+      "host_key": "hermes.hiro",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory",
+      "machine": "linux",
+      "machine_status": "online",
+      "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
+    },
+    {
+      "peer": "Wintermute",
+      "workspace": "hermes.wintermute",
+      "host_key": "hermes.wintermute",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory",
+      "machine": "linux",
+      "machine_status": "online",
+      "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
+    },
+    {
+      "peer": "Count Zer0",
+      "workspace": "hermes.countzer0",
+      "host_key": "hermes.countzer0",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory",
+      "machine": "linux",
+      "machine_status": "online",
+      "machine_last_seen_at": "2026-05-23T01:24:25.734839+00:00"
+    }
+  ]
 }

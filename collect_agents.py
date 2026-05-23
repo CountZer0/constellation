@@ -101,12 +101,19 @@ def parse_config(path):
 
 
 def parse_honcho(path):
-    """Extract Honcho peer connections"""
+    """Extract Honcho peer connections.
+
+    Honcho config is authoritative for the constellation memory map. Keep the
+    visualizer aligned with the same host-block contract Hermes resolves:
+    `peerName` is the human peer, `aiPeer` is the agent peer, and `workspace`
+    is the memory namespace.
+    """
     peers = []
     if not path.exists():
         return peers
     try:
         data = json.loads(path.read_text(errors="replace"))
+        root_user = data.get("peerName", "")
         hosts = data.get("hosts", {})
         for host_key, host_val in hosts.items():
             peer = host_val.get("aiPeer", "")
@@ -115,6 +122,11 @@ def parse_honcho(path):
                     "peer": peer,
                     "workspace": host_val.get("workspace", ""),
                     "host_key": host_key,
+                    "user_peer": host_val.get("peerName") or root_user,
+                    "enabled": host_val.get("enabled", data.get("enabled", True)),
+                    "recallMode": host_val.get("recallMode", data.get("recallMode", "hybrid")),
+                    "writeFrequency": host_val.get("writeFrequency", data.get("writeFrequency", "async")),
+                    "sessionStrategy": host_val.get("sessionStrategy", data.get("sessionStrategy", "per-directory")),
                 })
     except (json.JSONDecodeError, KeyError):
         pass

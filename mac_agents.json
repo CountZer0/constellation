@@ -51,7 +51,13 @@
         "toolsets": [
           "hermes-cli"
         ],
-        "platforms": []
+        "platforms": [],
+        "honcho": {
+          "peer": "Buddha",
+          "workspace": "hermes.buddha",
+          "host_key": "hermes.buddha",
+          "user_peer": "Countzer0"
+        }
       }
     },
     "hiro": {
@@ -74,7 +80,13 @@
           "file",
           "web"
         ],
-        "platforms": []
+        "platforms": [],
+        "honcho": {
+          "peer": "Hiro Protagonist",
+          "workspace": "hermes.hiro",
+          "host_key": "hermes.hiro",
+          "user_peer": "Countzer0"
+        }
       }
     },
     "wintermute": {
@@ -96,7 +108,13 @@
           "image_gen",
           "browser"
         ],
-        "platforms": []
+        "platforms": [],
+        "honcho": {
+          "peer": "Wintermute",
+          "workspace": "hermes.wintermute",
+          "host_key": "hermes.wintermute",
+          "user_peer": "Countzer0"
+        }
       }
     },
     "Count Zer0": {
@@ -123,7 +141,13 @@
         ],
         "platforms": [
           "telegram"
-        ]
+        ],
+        "honcho": {
+          "peer": "Count Zer0",
+          "workspace": "hermes.countzer0",
+          "host_key": "hermes.countzer0",
+          "user_peer": "Countzer0"
+        }
       }
     },
     "telegram": {

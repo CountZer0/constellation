@@ -193,6 +193,12 @@
     ],
     [
       "CLU",
+      "TRON",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
       "Ares",
       "cross-mesh",
       "#ff8c00"
@@ -202,19 +208,113 @@
       "CAAC",
       "cross-mesh",
       "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Buddha",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Hiro Protagonist",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Wintermute",
+      "cross-mesh",
+      "#ff8c00"
+    ],
+    [
+      "CLU",
+      "Count Zer0",
+      "cross-mesh",
+      "#ff8c00"
     ]
   ],
   "honcho_peers": [
     {
+      "peer": "TRON",
+      "workspace": "hermes",
+      "host_key": "hermes",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory"
+    },
+    {
       "peer": "Ares",
       "workspace": "hermes.ares",
-      "host_key": "hermes.ares"
+      "host_key": "hermes.ares",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-repo"
     },
     {
       "peer": "CAAC",
       "workspace": "hermes.caac",
-      "host_key": "hermes.caac"
+      "host_key": "hermes.caac",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "tools",
+      "writeFrequency": "session",
+      "sessionStrategy": "per-session"
+    },
+    {
+      "peer": "CLU",
+      "workspace": "hermes.clu",
+      "host_key": "hermes.clu",
+      "user_peer": "Countzer0",
+      "enabled": false,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory"
+    },
+    {
+      "peer": "Buddha",
+      "workspace": "hermes.buddha",
+      "host_key": "hermes.buddha",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory"
+    },
+    {
+      "peer": "Hiro Protagonist",
+      "workspace": "hermes.hiro",
+      "host_key": "hermes.hiro",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory"
+    },
+    {
+      "peer": "Wintermute",
+      "workspace": "hermes.wintermute",
+      "host_key": "hermes.wintermute",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory"
+    },
+    {
+      "peer": "Count Zer0",
+      "workspace": "hermes.countzer0",
+      "host_key": "hermes.countzer0",
+      "user_peer": "Countzer0",
+      "enabled": true,
+      "recallMode": "hybrid",
+      "writeFrequency": "async",
+      "sessionStrategy": "per-directory"
     }
   ],
-  "collected_at": "2026-05-23T00:24:22.899159+00:00"
+  "collected_at": "2026-05-23T01:24:25.734839+00:00"
 }
