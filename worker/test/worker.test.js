@@ -222,7 +222,7 @@ test('GET /v1/layout returns empty overrides initially', async () => {
   assert.deepEqual(body, { overrides: {} });
 });
 
-test('POST /v1/layout without LAYOUT_WRITE_SECRET returns 503', async () => {
+test('POST /v1/layout is public (no auth required) and persists overrides', async () => {
   const env = { DB: new MockD1() };
   const req = new Request('https://example.test/v1/layout', {
     method: 'POST',
@@ -230,25 +230,17 @@ test('POST /v1/layout without LAYOUT_WRITE_SECRET returns 503', async () => {
     body: JSON.stringify({ overrides: { x: { x: 1, y: 2 } } }),
   });
   const res = await handleRequest(req, env);
-  assert.equal(res.status, 503);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.written, 1);
 });
 
-test('POST /v1/layout with bad token returns 401', async () => {
-  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
-  const req = new Request('https://example.test/v1/layout', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer wrong' },
-    body: JSON.stringify({ overrides: { x: { x: 1, y: 2 } } }),
-  });
-  const res = await handleRequest(req, env);
-  assert.equal(res.status, 401);
-});
-
-test('POST /v1/layout with good token persists overrides, GET returns them', async () => {
-  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+test('POST /v1/layout persists overrides, GET returns them', async () => {
+  const env = { DB: new MockD1() };
   const postReq = new Request('https://example.test/v1/layout', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer right' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       overrides: {
         'mac_buddha': { x: 100, y: 200 },
@@ -270,10 +262,10 @@ test('POST /v1/layout with good token persists overrides, GET returns them', asy
 });
 
 test('POST /v1/layout rejects non-finite coords', async () => {
-  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+  const env = { DB: new MockD1() };
   const req = new Request('https://example.test/v1/layout', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer right' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       overrides: {
         ok:  { x: 1, y: 2 },
@@ -289,15 +281,14 @@ test('POST /v1/layout rejects non-finite coords', async () => {
 });
 
 test('DELETE /v1/layout/<id> removes a single override', async () => {
-  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+  const env = { DB: new MockD1() };
   await handleRequest(new Request('https://example.test/v1/layout', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer right' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ overrides: { a: { x: 1, y: 2 }, b: { x: 3, y: 4 } } }),
   }), env);
   const delRes = await handleRequest(new Request('https://example.test/v1/layout/a', {
     method: 'DELETE',
-    headers: { authorization: 'Bearer right' },
   }), env);
   assert.equal(delRes.status, 200);
   const getRes = await handleRequest(new Request('https://example.test/v1/layout'), env);
@@ -307,15 +298,14 @@ test('DELETE /v1/layout/<id> removes a single override', async () => {
 });
 
 test('DELETE /v1/layout (bulk) clears all overrides', async () => {
-  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+  const env = { DB: new MockD1() };
   await handleRequest(new Request('https://example.test/v1/layout', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer right' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ overrides: { a: { x: 1, y: 2 }, b: { x: 3, y: 4 } } }),
   }), env);
   const delRes = await handleRequest(new Request('https://example.test/v1/layout', {
     method: 'DELETE',
-    headers: { authorization: 'Bearer right' },
   }), env);
   assert.equal(delRes.status, 200);
   const body = await (await handleRequest(new Request('https://example.test/v1/layout'), env)).json();

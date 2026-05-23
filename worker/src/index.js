@@ -336,8 +336,6 @@ async function handleLayoutGet(env) {
 }
 
 async function handleLayoutPost(request, env, now) {
-  const authError = requireLayoutAuth(request, env);
-  if (authError) return authError;
   let body;
   try {
     body = await request.json();
@@ -368,28 +366,13 @@ async function handleLayoutPost(request, env, now) {
 }
 
 async function handleLayoutDelete(request, env) {
-  const authError = requireLayoutAuth(request, env);
-  if (authError) return authError;
   await env.DB.prepare('DELETE FROM layout_overrides').run();
   return json({ ok: true, cleared: true });
 }
 
 async function handleLayoutDeleteOne(request, env, agentId) {
-  const authError = requireLayoutAuth(request, env);
-  if (authError) return authError;
   await env.DB.prepare('DELETE FROM layout_overrides WHERE agent_id = ?').bind(agentId).run();
   return json({ ok: true, deleted: agentId });
-}
-
-function requireLayoutAuth(request, env) {
-  const secret = env.LAYOUT_WRITE_SECRET;
-  if (!secret) return json({ error: 'sync_not_configured' }, { status: 503 });
-  const header = request.headers.get('authorization') || '';
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match || !timingSafeEqual(match[1], secret)) {
-    return json({ error: 'unauthorized' }, { status: 401 });
-  }
-  return null;
 }
 
 export async function bodySha256Hex(body) {

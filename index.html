@@ -128,7 +128,7 @@
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--dim);"></div> Offline Machine</div>
   <div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border); display:flex; gap:10px; font-size:9px;">
     <a href="#" id="reset-layout" style="color:var(--cyan); text-decoration:none;">[reset layout]</a>
-    <a href="#" id="configure-sync" style="color:var(--purple); text-decoration:none;">[sync settings]</a>
+    <span style="color:var(--dim);">drag any node — synced across devices</span>
   </div>
 </div>
 
@@ -145,12 +145,17 @@ const LAYOUT_URL = 'https://constellation-telemetry.count-zr0.workers.dev/v1/lay
 
 // ─── Layout overrides (drag-to-place) ──────────────────────────────────────
 // Shape: { agent_id: { x, y } } in WORLD coordinates.
-// Persists in localStorage immediately; also synced to the Worker if a
-// LAYOUT_WRITE_TOKEN is configured by the user (saved in localStorage).
+// The server (Cloudflare Worker + D1) is the source of truth. localStorage
+// is only a fast-paint cache + offline fallback. Any drag from any client
+// is pushed to /v1/layout and picked up by all other clients on their next
+// refresh (initial load and every 60s).
 const LOCAL_KEY = 'constellation_layout_v1';
-const TOKEN_KEY = 'constellation_layout_token';
 let layoutOverrides = {};
 let pendingSync = null;
+// Keys this client has modified since the last successful POST. We only
+// push these (not the entire overrides map) so a stale localStorage entry
+// can never clobber a fresh drag from another client.
+let dirtyKeys = new Set();
 
 function loadLocalOverrides() {
   try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}') || {}; }
@@ -158,12 +163,6 @@ function loadLocalOverrides() {
 }
 function saveLocalOverrides() {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(layoutOverrides)); } catch {}
-}
-function getLayoutToken() {
-  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
-}
-function setLayoutToken(t) {
-  try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch {}
 }
 
 async function fetchServerOverrides() {
@@ -176,27 +175,31 @@ async function fetchServerOverrides() {
 }
 
 function queueServerSync() {
-  const token = getLayoutToken();
-  if (!token) return; // sync not configured — localStorage only
   if (pendingSync) clearTimeout(pendingSync);
   pendingSync = setTimeout(async () => {
     pendingSync = null;
+    if (dirtyKeys.size === 0) return;
+    const payload = {};
+    for (const k of dirtyKeys) {
+      if (layoutOverrides[k]) payload[k] = layoutOverrides[k];
+    }
+    const sending = new Set(dirtyKeys);
+    dirtyKeys = new Set(); // optimistic clear
     try {
       const resp = await fetch(LAYOUT_URL, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'authorization': `Bearer ${token}` },
-        body: JSON.stringify({ overrides: layoutOverrides }),
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ overrides: payload }),
       });
-      if (resp.status === 401) {
-        flashStatus('sync: bad token', 'offline');
-      } else if (resp.status === 503) {
-        flashStatus('sync: not configured on worker', 'offline');
-      } else if (!resp.ok) {
+      if (!resp.ok) {
+        // re-mark for the next attempt
+        for (const k of sending) dirtyKeys.add(k);
         flashStatus(`sync: HTTP ${resp.status}`, 'offline');
       } else {
         flashStatus('sync: saved', 'fresh');
       }
     } catch (e) {
+      for (const k of sending) dirtyKeys.add(k);
       flashStatus('sync: offline', 'offline');
     }
   }, 600);
@@ -210,32 +213,15 @@ function flashStatus(text, klass) {
 
 async function resetAllLayout() {
   layoutOverrides = {};
+  dirtyKeys = new Set();
   saveLocalOverrides();
   layoutGraph();
-  const token = getLayoutToken();
-  if (token) {
-    try {
-      await fetch(LAYOUT_URL, { method: 'DELETE', headers: { authorization: `Bearer ${token}` } });
-      flashStatus('layout reset (synced)', 'fresh');
-    } catch { flashStatus('layout reset (local only)', 'offline'); }
-  } else {
-    flashStatus('layout reset', 'fresh');
-  }
-}
-
-function configureSyncToken() {
-  const current = getLayoutToken();
-  const next = window.prompt(
-    'Paste LAYOUT_WRITE_SECRET to sync drag positions across devices.\nLeave blank to clear and use localStorage only.',
-    current,
-  );
-  if (next === null) return; // cancelled
-  setLayoutToken(next.trim());
-  if (next.trim()) {
-    flashStatus('sync token saved', 'fresh');
-    queueServerSync(); // push current overrides immediately
-  } else {
-    flashStatus('sync disabled', 'offline');
+  try {
+    const resp = await fetch(LAYOUT_URL, { method: 'DELETE' });
+    if (resp.ok) flashStatus('layout reset (synced)', 'fresh');
+    else flashStatus(`layout reset (server HTTP ${resp.status})`, 'offline');
+  } catch {
+    flashStatus('layout reset (local only — server offline)', 'offline');
   }
 }
 
@@ -261,17 +247,16 @@ async function loadData(retries = 3) {
       const resp = await fetch(AGENTS_URL, { cache: 'no-cache' });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       DATA = await resp.json();
-      // Local overrides first so the initial render uses what the user saved.
+      // Render fast using whatever the local cache has; the server overlay
+      // arrives async and overrides — server is the source of truth.
       layoutOverrides = loadLocalOverrides();
       updateHeader();
       layoutGraph();
       render();
-      // Async overlay from server (last-writer-wins for keys present on both).
       fetchServerOverrides().then(server => {
         if (!server) return;
-        const merged = { ...layoutOverrides, ...server };
-        if (JSON.stringify(merged) !== JSON.stringify(layoutOverrides)) {
-          layoutOverrides = merged;
+        if (JSON.stringify(server) !== JSON.stringify(layoutOverrides)) {
+          layoutOverrides = server;
           saveLocalOverrides();
           layoutGraph();
         }
@@ -682,6 +667,7 @@ window.addEventListener('mouseup', () => {
     if (nodeDrag.moved) {
       const p = positions[nodeDrag.id];
       layoutOverrides[nodeDrag.id] = { x: p.x, y: p.y };
+      dirtyKeys.add(nodeDrag.id);
       saveLocalOverrides();
       queueServerSync();
       // Suppress the trailing click so a drag doesn't also toggle selection.
@@ -772,9 +758,6 @@ document.getElementById('reset-layout').addEventListener('click', (e) => {
   e.preventDefault();
   if (window.confirm('Reset all dragged positions to the computed layout?')) resetAllLayout();
 });
-document.getElementById('configure-sync').addEventListener('click', (e) => {
-  e.preventDefault(); configureSyncToken();
-});
 window.addEventListener('keydown', (e) => {
   // Ignore when typing in an input/textarea.
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
@@ -793,6 +776,14 @@ setInterval(async () => {
     const oldCount = Object.keys(DATA?.agents || {}).length;
     const newCount = Object.keys(fresh.agents || {}).length;
     DATA = fresh;
+    // Refresh shared layout too.
+    const server = await fetchServerOverrides();
+    if (server && JSON.stringify(server) !== JSON.stringify(layoutOverrides)) {
+      // Don't clobber drags this client made but hasn't yet pushed.
+      for (const k of dirtyKeys) if (layoutOverrides[k]) server[k] = layoutOverrides[k];
+      layoutOverrides = server;
+      saveLocalOverrides();
+    }
     layoutGraph();
     updateHeader();
     if (oldCount !== newCount) selectedAgent = null;
