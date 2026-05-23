@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-23T11:25:44.418168+00:00",
+  "generated_at": "2026-05-23T12:25:48.835228+00:00",
   "machines": [
     {
       "tag": "linux",
       "hostname": "Cyberspace-Seven",
       "os": "Linux",
-      "last_seen_at": "2026-05-23T11:25:44.371603+00:00",
+      "last_seen_at": "2026-05-23T12:25:48.770430+00:00",
       "age_seconds": 0,
       "status": "online"
     },
@@ -15,7 +15,7 @@
       "hostname": "Countzer0s-MacBook-Pro",
       "os": "Darwin",
       "last_seen_at": "2026-05-17T14:04:20.170669",
-      "age_seconds": 508884,
+      "age_seconds": 512488,
       "status": "offline"
     },
     {
@@ -23,7 +23,7 @@
       "hostname": "Cyberspace-Seven",
       "os": "Windows",
       "last_seen_at": "2026-05-17T20:58:59.916089",
-      "age_seconds": 484004,
+      "age_seconds": 487608,
       "status": "offline"
     }
   ],
@@ -41,7 +41,7 @@
         "home": "~/.hermes",
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+        "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
       }
     },
     "linux_gateway": {
@@ -57,7 +57,7 @@
         "home": "~/.hermes",
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+        "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
       }
     },
     "linux_ares": {
@@ -79,7 +79,7 @@
         "platforms": [],
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+        "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
       }
     },
     "linux_caac": {
@@ -101,7 +101,7 @@
         "platforms": [],
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+        "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
       }
     },
     "linux_CLU": {
@@ -126,7 +126,7 @@
         ],
         "machine_status": "online",
         "machine_age_seconds": 0,
-        "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+        "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
       }
     },
     "telegram": {
@@ -139,7 +139,7 @@
       "details": {
         "state": "connected",
         "machine_status": "offline",
-        "machine_age_seconds": 484004,
+        "machine_age_seconds": 487608,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -153,7 +153,7 @@
       "details": {
         "state": "connected",
         "machine_status": "offline",
-        "machine_age_seconds": 484004,
+        "machine_age_seconds": 487608,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -167,7 +167,7 @@
       "details": {
         "state": "paused",
         "machine_status": "offline",
-        "machine_age_seconds": 484004,
+        "machine_age_seconds": 487608,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -183,7 +183,7 @@
         "os": "Darwin",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 508884,
+        "machine_age_seconds": 512488,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -199,7 +199,7 @@
         "gateway_state": "running",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 508884,
+        "machine_age_seconds": 512488,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -227,7 +227,7 @@
           "user_peer": "Countzer0"
         },
         "machine_status": "offline",
-        "machine_age_seconds": 508884,
+        "machine_age_seconds": 512488,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -259,7 +259,7 @@
           "user_peer": "Countzer0"
         },
         "machine_status": "offline",
-        "machine_age_seconds": 508884,
+        "machine_age_seconds": 512488,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -290,7 +290,7 @@
           "user_peer": "Countzer0"
         },
         "machine_status": "offline",
-        "machine_age_seconds": 508884,
+        "machine_age_seconds": 512488,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -326,7 +326,7 @@
           "user_peer": "Countzer0"
         },
         "machine_status": "offline",
-        "machine_age_seconds": 508884,
+        "machine_age_seconds": 512488,
         "machine_last_seen_at": "2026-05-17T14:04:20.170669"
       }
     },
@@ -342,7 +342,7 @@
         "os": "Windows",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 484004,
+        "machine_age_seconds": 487608,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -358,7 +358,7 @@
         "gateway_state": "running",
         "home": "~/.hermes",
         "machine_status": "offline",
-        "machine_age_seconds": 484004,
+        "machine_age_seconds": 487608,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -386,7 +386,7 @@
           "user_peer": "Countzer0"
         },
         "machine_status": "offline",
-        "machine_age_seconds": 484004,
+        "machine_age_seconds": 487608,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -414,7 +414,7 @@
           "user_peer": "Countzer0"
         },
         "machine_status": "offline",
-        "machine_age_seconds": 484004,
+        "machine_age_seconds": 487608,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     },
@@ -445,7 +445,7 @@
           "user_peer": "Countzer0"
         },
         "machine_status": "offline",
-        "machine_age_seconds": 484004,
+        "machine_age_seconds": 487608,
         "machine_last_seen_at": "2026-05-17T20:58:59.916089"
       }
     }
@@ -696,7 +696,7 @@
     "linux": {
       "pid": 201283,
       "state": "running",
-      "last_seen_at": "2026-05-23T11:25:44.371603+00:00",
+      "last_seen_at": "2026-05-23T12:25:48.770430+00:00",
       "age_seconds": 0,
       "status": "online"
     },
@@ -704,14 +704,14 @@
       "pid": 81213,
       "state": "running",
       "last_seen_at": "2026-05-17T14:04:20.170669",
-      "age_seconds": 508884,
+      "age_seconds": 512488,
       "status": "offline"
     },
     "win": {
       "pid": 681069,
       "state": "running",
       "last_seen_at": "2026-05-17T20:58:59.916089",
-      "age_seconds": 484004,
+      "age_seconds": 487608,
       "status": "offline"
     }
   },
@@ -727,7 +727,7 @@
       "sessionStrategy": "per-directory",
       "machine": "linux",
       "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
     },
     {
       "peer": "Ares",
@@ -740,7 +740,7 @@
       "sessionStrategy": "per-repo",
       "machine": "linux",
       "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
     },
     {
       "peer": "CAAC",
@@ -753,7 +753,7 @@
       "sessionStrategy": "per-session",
       "machine": "linux",
       "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
     },
     {
       "peer": "CLU",
@@ -766,7 +766,7 @@
       "sessionStrategy": "per-directory",
       "machine": "linux",
       "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
     },
     {
       "peer": "Buddha",
@@ -779,7 +779,7 @@
       "sessionStrategy": "per-directory",
       "machine": "linux",
       "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
     },
     {
       "peer": "Hiro Protagonist",
@@ -792,7 +792,7 @@
       "sessionStrategy": "per-directory",
       "machine": "linux",
       "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
     },
     {
       "peer": "Wintermute",
@@ -805,7 +805,7 @@
       "sessionStrategy": "per-directory",
       "machine": "linux",
       "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
     },
     {
       "peer": "Count Zer0",
@@ -818,7 +818,7 @@
       "sessionStrategy": "per-directory",
       "machine": "linux",
       "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T11:25:44.371603+00:00"
+      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
     }
   ]
 }
