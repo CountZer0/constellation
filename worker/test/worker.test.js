@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { handleRequest, signSnapshot } from '../src/index.js';
+import { handleRequest, signSnapshot, mergeSnapshots } from '../src/index.js';
 
 class MockD1 {
   constructor() {
@@ -134,3 +134,59 @@ test('GET /v1/health returns ok', async () => {
   assert.equal(response.status, 200);
   assert.equal(body.ok, true);
 });
+
+test('mergeSnapshots: repo: ids stay shared (no machine-tag scoping)', () => {
+  const macSnap = {
+    schema_version: 1,
+    machine: { tag: 'mac', hostname: 'mbp', os: 'Darwin' },
+    gateway: { state: 'running' },
+    collected_at: new Date().toISOString(),
+    agents: {
+      count: { id: 'count', label: 'Count', type: 'agent', sublabel: '[default]' },
+      'repo:CountZer0/hermes-skills': {
+        id: 'repo:CountZer0/hermes-skills',
+        label: 'CountZer0/hermes-skills',
+        type: 'service',
+        color: '#9b59b6',
+        shape: 'square',
+      },
+    },
+    edges: [['count', 'repo:CountZer0/hermes-skills', 'repo', '#9b59b6']],
+  };
+  const winSnap = {
+    schema_version: 1,
+    machine: { tag: 'win', hostname: 'cyber7', os: 'Windows' },
+    gateway: { state: 'running' },
+    collected_at: new Date().toISOString(),
+    agents: {
+      tron: { id: 'tron', label: 'TRON', type: 'agent', sublabel: '[default]' },
+      'repo:CountZer0/hermes-skills': {
+        id: 'repo:CountZer0/hermes-skills',
+        label: 'CountZer0/hermes-skills',
+        type: 'service',
+        color: '#9b59b6',
+        shape: 'square',
+      },
+    },
+    edges: [['tron', 'repo:CountZer0/hermes-skills', 'repo', '#9b59b6']],
+  };
+  const merged = mergeSnapshots([macSnap, winSnap]);
+
+  // The shared repo node must appear exactly once, unscoped.
+  assert.ok(merged.agents['repo:CountZer0/hermes-skills'],
+    'shared repo node should be merged under its unscoped id');
+  assert.equal(Object.keys(merged.agents).filter(id => id.includes('hermes-skills')).length, 1,
+    'should not be machine-prefixed copies of the shared repo node');
+
+  // Both agents' edges should point to the shared id; default agents themselves
+  // get machine-prefixed.
+  const repoEdges = merged.edges.filter(e => e[2] === 'repo');
+  assert.equal(repoEdges.length, 2);
+  for (const [from, to] of repoEdges) {
+    assert.equal(to, 'repo:CountZer0/hermes-skills',
+      'repo edge target must remain unscoped');
+    assert.ok(from === 'mac_count' || from === 'win_tron',
+      `repo edge source must be machine-scoped agent id, got ${from}`);
+  }
+});
+

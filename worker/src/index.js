@@ -1,4 +1,14 @@
 const SHARED_SERVICES = new Set(['telegram', 'discord', 'slack', 'whatsapp', 'signal', 'mattermost', 'matrix', 'webhook']);
+// Any agent id with one of these prefixes is treated as a shared cross-machine
+// node (no machine-tag scoping during merge). Used for repo:, guild:, etc.
+const SHARED_SERVICE_PREFIXES = ['repo:', 'guild:'];
+function isSharedService(id) {
+  if (SHARED_SERVICES.has(id)) return true;
+  for (const prefix of SHARED_SERVICE_PREFIXES) {
+    if (id.startsWith(prefix)) return true;
+  }
+  return false;
+}
 const SCHEMA_VERSION = 1;
 const STALE_AFTER_SECONDS = 10 * 60;
 const OFFLINE_AFTER_SECONDS = 60 * 60;
@@ -199,7 +209,9 @@ export function mergeSnapshots(dataList, now = new Date()) {
 
     for (const [agentId, originalAgent] of Object.entries(data.agents || {})) {
       const annotated = annotateNode(originalAgent, status, age_seconds, collectedAt);
-      if (SHARED_SERVICES.has(agentId)) {
+      if (isSharedService(agentId)) {
+        // Last writer wins for shared service nodes — fine: their content
+        // (e.g. repo url) is identical across machines that connect to them.
         merged.agents[agentId] = annotated;
         continue;
       }
@@ -213,8 +225,8 @@ export function mergeSnapshots(dataList, now = new Date()) {
     for (const edge of data.edges || []) {
       if (!Array.isArray(edge) || edge.length < 4) continue;
       let [fromId, toId, type, color] = edge;
-      if (!SHARED_SERVICES.has(fromId)) fromId = `${machineTag}_${fromId}`;
-      if (!SHARED_SERVICES.has(toId)) toId = `${machineTag}_${toId}`;
+      if (!isSharedService(fromId)) fromId = `${machineTag}_${fromId}`;
+      if (!isSharedService(toId)) toId = `${machineTag}_${toId}`;
       merged.edges.push([fromId, toId, type, color]);
     }
   }

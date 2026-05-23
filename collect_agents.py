@@ -38,6 +38,18 @@ COLOR_MAP = {
     "caac":       "#ff6b6b",
     "ares":       "#e055ff",
 }
+REPO_COLOR = "#9b59b6"
+
+# Hermes' default profiles sync skills to this repo. Surfaced as a shared
+# stash-sync hub when profiles don't declare an explicit target.
+DEFAULT_STASH_SYNC_URL = "https://github.com/CountZer0/hermes-skills"
+
+# Constellation itself is the repo the machine-level cron belongs to.
+CONSTELLATION_REPO_URL = "https://github.com/CountZer0/constellation"
+
+# Repo kinds that should also surface as shared nodes on the graph (with
+# `repo:<owner>/<name>` ids, merged across machines by the Worker).
+SHARED_REPO_KINDS = {"stash-sync", "stash-sync-default", "constellation"}
 DEFAULT_AGENT_COLORS = ["#00e5ff", "#ff2d7b", "#ffd700", "#b24dff", "#ff8c00", "#e055ff", "#4d8bff"]
 _color_idx = 0
 
@@ -204,6 +216,272 @@ def get_toolsets(profile_path, default_toolsets=None):
     return toolsets or default_toolsets or []
 
 
+
+# ═══════════════════════════════════════════════════════
+# REPO DISCOVERY
+# ═══════════════════════════════════════════════════════
+
+def canonicalize_repo_url(url):
+    """Normalize a git remote URL so the same repo dedupes regardless of style.
+
+    Examples:
+        git@github.com:CountZer0/hermes-skills.git
+          -> https://github.com/CountZer0/hermes-skills
+        https://github.com/CountZer0/hermes-skills.git
+          -> https://github.com/CountZer0/hermes-skills
+    """
+    if not url:
+        return ""
+    u = url.strip()
+    m = re.match(r'^git@([^:]+):(.+?)(?:\.git)?/?$', u)
+    if m:
+        return f"https://{m.group(1)}/{m.group(2)}"
+    m = re.match(r'^(?:https?|git)://(.+?)(?:\.git)?/?$', u)
+    if m:
+        return f"https://{m.group(1)}"
+    return u
+
+
+def repo_name_from_url(url):
+    """Extract 'owner/name' from a canonical URL."""
+    m = re.match(r'^https?://([^/]+)/(.+?)/?$', url)
+    if not m:
+        return url
+    parts = m.group(2).split('/')
+    if len(parts) >= 2:
+        return f"{parts[0]}/{parts[1]}"
+    return m.group(2)
+
+
+def parse_git_remotes(git_dir):
+    """Read .git/config, return [{name, url}, ...]. Stdlib-only via configparser."""
+    import configparser
+    cfg = git_dir / "config"
+    if not cfg.exists():
+        return []
+    cp = configparser.ConfigParser(strict=False)
+    try:
+        cp.read(str(cfg))
+    except Exception:
+        return []
+    remotes = []
+    for section in cp.sections():
+        m = re.match(r'^remote\s+"?([^"]+)"?$', section)
+        if not m:
+            continue
+        url = cp.get(section, 'url', fallback=None)
+        if url:
+            remotes.append({"name": m.group(1), "url": url.strip()})
+    return remotes
+
+
+def git_branch(git_dir):
+    head_file = git_dir / "HEAD"
+    if not head_file.exists():
+        return None
+    try:
+        head = head_file.read_text(errors="replace").strip()
+    except Exception:
+        return None
+    m = re.match(r'^ref: refs/heads/(.+)$', head)
+    return m.group(1) if m else None
+
+
+def git_last_synced(git_dir):
+    """Best-effort last-sync timestamp from FETCH_HEAD, the branch ref, or HEAD."""
+    import datetime as _dt
+    candidates = [git_dir / "FETCH_HEAD"]
+    branch = git_branch(git_dir)
+    if branch:
+        candidates.append(git_dir / "refs" / "heads" / branch)
+    candidates.append(git_dir / "HEAD")
+    for c in candidates:
+        try:
+            if c.exists():
+                ts = c.stat().st_mtime
+                return _dt.datetime.fromtimestamp(ts, tz=_dt.timezone.utc).isoformat()
+        except Exception:
+            continue
+    return None
+
+
+def discover_filesystem_repos(scan_root, max_depth=3):
+    """Find .git directories under scan_root (BFS), return list of repo dicts.
+
+    Each repo: {url, url_raw, name, branch, last_synced_at, source: 'filesystem',
+                path, remote}. Repos are deduped by canonical url.
+    """
+    if not scan_root.exists() or not scan_root.is_dir():
+        return []
+    repos = []
+    seen = set()
+    queue = [(scan_root, 0)]
+    while queue:
+        path, depth = queue.pop(0)
+        if depth > max_depth:
+            continue
+        git_dir = path / ".git"
+        if git_dir.is_dir():
+            for remote in parse_git_remotes(git_dir):
+                canonical = canonicalize_repo_url(remote["url"])
+                if not canonical or canonical in seen:
+                    continue
+                seen.add(canonical)
+                try:
+                    rel = str(path.relative_to(scan_root))
+                except ValueError:
+                    rel = str(path)
+                if rel == ".":
+                    rel = scan_root.name
+                repos.append({
+                    "url": canonical,
+                    "url_raw": remote["url"],
+                    "name": repo_name_from_url(canonical),
+                    "branch": git_branch(git_dir),
+                    "last_synced_at": git_last_synced(git_dir),
+                    "source": "filesystem",
+                    "path": rel,
+                    "remote": remote["name"],
+                })
+            # Don't descend into a repo
+            continue
+        try:
+            for child in sorted(path.iterdir()):
+                if child.is_dir() and not child.name.startswith("."):
+                    queue.append((child, depth + 1))
+        except (PermissionError, OSError):
+            continue
+    return repos
+
+
+def classify_repo_kind(repo, profile_name=None, is_default_agent=False):
+    """Guess what role this repo plays for an agent."""
+    canonical = repo.get("url", "")
+    path = (repo.get("path") or "").lower()
+    if canonical == DEFAULT_STASH_SYNC_URL or canonical.endswith("/hermes-skills"):
+        return "stash-sync"
+    if canonical == CONSTELLATION_REPO_URL:
+        return "constellation"
+    if "skills" in path:
+        return "skill"
+    if "toolsets" in path or "toolset" in path:
+        return "toolset"
+    if "profiles" in path:
+        return "profile"
+    return "other"
+
+
+def scan_crontab_for_repos():
+    """Best-effort crontab parse. Returns [{url, url_raw, name, source: 'cron',
+    cron, profile}]. Profile is None for machine-level entries."""
+    import subprocess
+    repos = []
+    try:
+        result = subprocess.run(
+            ["crontab", "-l"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
+        return repos
+    if result.returncode != 0:
+        return repos
+    cron_text = result.stdout or ""
+
+    url_patterns = [
+        r'(https?://github\.com/[^\s"\'\\;|&]+?)(?=[\s"\';|&]|$)',
+        r'(git@github\.com:[^\s"\'\\;|&]+?)(?=[\s"\';|&]|$)',
+    ]
+    for line in cron_text.split("\n"):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        urls_in_line = []
+        for pat in url_patterns:
+            urls_in_line.extend(re.findall(pat, stripped))
+        if "constellation-post.sh" in stripped or "constellation-update.sh" in stripped:
+            urls_in_line.append(CONSTELLATION_REPO_URL)
+        if not urls_in_line:
+            continue
+
+        schedule = None
+        if stripped.startswith("@"):
+            schedule = stripped.split()[0]
+        else:
+            tokens = stripped.split(None, 5)
+            if len(tokens) >= 5:
+                schedule = " ".join(tokens[:5])
+
+        profile_match = re.search(r'\.hermes/profiles/([a-zA-Z0-9_-]+)', stripped)
+        profile = profile_match.group(1) if profile_match else None
+
+        for url in urls_in_line:
+            canonical = canonicalize_repo_url(url)
+            if not canonical:
+                continue
+            repos.append({
+                "url": canonical,
+                "url_raw": url,
+                "name": repo_name_from_url(canonical),
+                "source": "cron",
+                "cron": schedule,
+                "profile": profile,
+            })
+    return repos
+
+
+def merge_repo_lists(filesystem_repos, cron_repos, profile_name=None, is_default_agent=False):
+    """Merge filesystem and cron-derived repo lists, dedupe by canonical url.
+    Filesystem records win on conflicting fields; cron-only metadata (the
+    `cron` schedule, the matched cron line) is preserved as an annotation."""
+    by_url = {}
+    for r in filesystem_repos:
+        key = r["url"]
+        if key in by_url:
+            continue
+        entry = dict(r)
+        entry["kind"] = classify_repo_kind(entry, profile_name, is_default_agent)
+        entry["sources"] = ["filesystem"]
+        by_url[key] = entry
+    for r in cron_repos:
+        key = r["url"]
+        if key in by_url:
+            existing = by_url[key]
+            srcs = set(existing.get("sources", [existing.get("source", "")]))
+            srcs.add("cron")
+            existing["sources"] = sorted(s for s in srcs if s)
+            if r.get("cron") and not existing.get("cron"):
+                existing["cron"] = r["cron"]
+        else:
+            entry = dict(r)
+            entry["kind"] = classify_repo_kind(entry, profile_name, is_default_agent)
+            entry["sources"] = ["cron"]
+            by_url[key] = entry
+    return list(by_url.values())
+
+
+def repo_shared_id(url):
+    """Build the SHARED_SERVICES-style id for a repo node, e.g. repo:owner/name."""
+    name = repo_name_from_url(url)
+    return f"repo:{name}"
+
+
+def repo_node(url, kind):
+    """Return the shared agents-dict entry for a repo node."""
+    name = repo_name_from_url(url)
+    return {
+        "id": repo_shared_id(url),
+        "label": name,
+        "sublabel": kind,
+        "type": "service",
+        "color": REPO_COLOR,
+        "shape": "square",
+        "details": {
+            "url": url,
+            "kind": kind,
+        },
+    }
+
+
 # ═══════════════════════════════════════════════════════
 # MAIN COLLECTION
 # ═══════════════════════════════════════════════════════
@@ -230,6 +508,9 @@ def collect(machine_tag=None, default_name=None):
     # Determine default agent name
     default_id = default_name or machine.get("tag", "default")
 
+    # ── Collect crontab once (shared by default + sub-profiles) ──
+    cron_repos = scan_crontab_for_repos()
+
     # ── Collect sub-profiles ──
     agents = {}
     if PROFILES_DIR.exists():
@@ -247,6 +528,13 @@ def collect(machine_tag=None, default_name=None):
                 if voice and len(voice) > 60:
                     voice = voice[:57] + "..."
 
+                profile_fs_repos = discover_filesystem_repos(p)
+                profile_cron_repos = [r for r in cron_repos if r.get("profile") == p.name]
+                profile_repos = merge_repo_lists(
+                    profile_fs_repos, profile_cron_repos,
+                    profile_name=p.name, is_default_agent=False,
+                )
+
                 agents[p.name] = {
                     "id": p.name,
                     "label": display_name,
@@ -262,6 +550,7 @@ def collect(machine_tag=None, default_name=None):
                         "home": f"~/.hermes/profiles/{p.name}",
                         "toolsets": toolsets,
                         "platforms": [],
+                        "repos": profile_repos,
                     }
                 }
 
@@ -275,6 +564,59 @@ def collect(machine_tag=None, default_name=None):
     if voice and len(voice) > 60:
         voice = voice[:57] + "..."
     role = default_soul.get("title") or default_soul.get("role", "Operator / Orchestrator")
+
+    # ── Discover repos for the default agent ──
+    # Scan ~/.hermes top-level (not profiles/ subdirs — those belong to sub-profiles).
+    default_fs_repos = []
+    seen_paths = set()
+    if HERMES_HOME.exists():
+        for child in sorted(HERMES_HOME.iterdir()):
+            if not child.is_dir():
+                continue
+            if child.name in ("profiles",) or child.name.startswith("."):
+                continue
+            for r in discover_filesystem_repos(child):
+                if r["url"] in seen_paths:
+                    continue
+                seen_paths.add(r["url"])
+                default_fs_repos.append(r)
+        # Also check HERMES_HOME itself in case ~/.hermes/.git exists
+        root_git = HERMES_HOME / ".git"
+        if root_git.is_dir():
+            for remote in parse_git_remotes(root_git):
+                canonical = canonicalize_repo_url(remote["url"])
+                if canonical and canonical not in seen_paths:
+                    seen_paths.add(canonical)
+                    default_fs_repos.append({
+                        "url": canonical,
+                        "url_raw": remote["url"],
+                        "name": repo_name_from_url(canonical),
+                        "branch": git_branch(root_git),
+                        "last_synced_at": git_last_synced(root_git),
+                        "source": "filesystem",
+                        "path": str(HERMES_HOME),
+                        "remote": remote["name"],
+                    })
+
+    default_cron_repos = [r for r in cron_repos if r.get("profile") is None]
+    default_repos = merge_repo_lists(
+        default_fs_repos, default_cron_repos,
+        profile_name=default_id, is_default_agent=True,
+    )
+
+    # If no hermes-skills repo was found anywhere for the default agent,
+    # surface the inferred default stash-sync target so the central hub
+    # still appears in the visualization.
+    if not any(r["url"] == DEFAULT_STASH_SYNC_URL or r.get("kind") == "stash-sync"
+               for r in default_repos):
+        default_repos.append({
+            "url": DEFAULT_STASH_SYNC_URL,
+            "url_raw": DEFAULT_STASH_SYNC_URL,
+            "name": repo_name_from_url(DEFAULT_STASH_SYNC_URL),
+            "kind": "stash-sync-default",
+            "source": "inferred",
+            "sources": ["inferred"],
+        })
 
     agents[default_id] = {
         "id": default_id,
@@ -292,6 +634,7 @@ def collect(machine_tag=None, default_name=None):
             "toolsets": default_toolsets,
             "platforms": [p for p, s in platforms.items()
                           if isinstance(s, dict) and s.get("state") == "connected"],
+            "repos": default_repos,
         }
     }
 
@@ -371,6 +714,21 @@ def collect(machine_tag=None, default_name=None):
         peer_name = peer_info.get("peer", "")
         if peer_name and peer_name not in agents and default_id in agents:
             edges.append([default_id, peer_name, "cross-mesh", "#ff8c00"])
+
+    # ── Shared repo nodes + edges (stash-sync hubs, constellation) ──
+    # Repos with SHARED_REPO_KINDS surface as repo:<owner>/<name> nodes that
+    # the Worker merges across machines via its SHARED_SERVICES set.
+    for agent_id, agent in list(agents.items()):
+        if agent.get("type") != "agent":
+            continue
+        for repo in (agent.get("details", {}).get("repos") or []):
+            kind = repo.get("kind")
+            if kind not in SHARED_REPO_KINDS:
+                continue
+            shared_id = repo_shared_id(repo["url"])
+            if shared_id not in agents:
+                agents[shared_id] = repo_node(repo["url"], kind)
+            edges.append([agent_id, shared_id, "repo", REPO_COLOR])
 
     return {
         "schema_version": 1,

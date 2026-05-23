@@ -19,6 +19,7 @@
     --yellow: #ffd700;
     --blue: #4d8bff;
     --orange: #ff8c00;
+    --repo: #9b59b6;
     --dim: #444;
   }
   body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; overflow: hidden; height: 100vh; width: 100vw; }
@@ -105,6 +106,7 @@
     <div class="detail-row"><span class="label">Machine</span><span class="value" id="dp-status">—</span></div>
   </div>
   <div class="detail-section"><h3>Toolsets</h3><div class="platforms" id="dp-toolsets"></div></div>
+  <div class="detail-section"><h3>Repos</h3><ul class="conn-list" id="dp-repos"></ul></div>
   <div class="detail-section"><h3>Connections</h3><ul class="conn-list" id="dp-connections"></ul></div>
   <div class="detail-section"><h3>Platforms</h3><div class="platforms" id="dp-platforms"></div></div>
 </div>
@@ -120,6 +122,8 @@
   <div class="legend-item"><div class="legend-line" style="background: var(--green);"></div> Gateway Host</div>
   <div class="legend-item"><div class="legend-line" style="background: var(--blue);"></div> Platform Link</div>
   <div class="legend-item"><div class="legend-line" style="background: var(--dim); opacity:0.4;"></div> Sibling Profile</div>
+  <div class="legend-item"><div class="legend-circle" style="border-color: var(--repo); border-radius: 2px;"></div> Repo (stash-sync)</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--repo);"></div> Repo Link</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--yellow);"></div> Stale Machine</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--dim);"></div> Offline Machine</div>
 </div>
@@ -194,9 +198,15 @@ function layoutGraph() {
   const h = window.innerHeight;
   const agents = DATA.agents || {};
 
-  // Group agents by machine
+  // Group agents by machine; shared repo nodes are unanchored and rendered
+  // in a top "shared" band spanning the full width.
   const byMachine = {};
+  const sharedRepoNodes = [];
   for (const [id, agent] of Object.entries(agents)) {
+    if (id.startsWith('repo:')) {
+      sharedRepoNodes.push({ id, ...agent });
+      continue;
+    }
     const m = agent.machine || 'unknown';
     if (!byMachine[m]) byMachine[m] = [];
     byMachine[m].push({ id, ...agent });
@@ -248,6 +258,19 @@ function layoutGraph() {
       positions[s.id] = { x: Math.round(cx + (si - (services.length-1)/2) * 100), y: Math.round(cy - 250) };
     });
   });
+
+  // Shared repo nodes — horizontal band across the top of the canvas.
+  if (sharedRepoNodes.length > 0) {
+    const totalW = w - 80;
+    const step = totalW / Math.max(sharedRepoNodes.length, 1);
+    const bandY = 90;
+    sharedRepoNodes.forEach((n, i) => {
+      positions[n.id] = {
+        x: Math.round(40 + step * (i + 0.5)),
+        y: bandY,
+      };
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -289,6 +312,17 @@ function formatAge(seconds) {
   return `${Math.round(seconds / 3600)}h`;
 }
 
+function formatAgeFromIso(iso) {
+  if (!iso) return '';
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return '';
+  const age = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (age < 60) return `${age}s ago`;
+  if (age < 3600) return `${Math.round(age / 60)}m ago`;
+  if (age < 86400) return `${Math.round(age / 3600)}h ago`;
+  return `${Math.round(age / 86400)}d ago`;
+}
+
 function drawGrid() {
   const w = window.innerWidth, h = window.innerHeight;
   ctx.strokeStyle = 'rgba(26,26,46,0.3)';
@@ -317,7 +351,8 @@ function drawEdge(from, to, color, type, t) {
   const rgb = hexToRgb(color);
   const pulse = (Math.sin(t * 2 + a.x * 0.01) + 1) / 2;
 
-  if (type === 'honcho') { ctx.setLineDash([8, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.4 + pulse * 0.3})`; ctx.lineWidth = 1.5; }
+  if (type === 'repo') { ctx.setLineDash([2, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.45 + pulse * 0.25})`; ctx.lineWidth = 1.5; }
+  else   if (type === 'honcho') { ctx.setLineDash([8, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.4 + pulse * 0.3})`; ctx.lineWidth = 1.5; }
   else if (type === 'sibling') { ctx.setLineDash([4, 8]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`; ctx.lineWidth = 1; }
   else if (type === 'cross-mesh') { ctx.setLineDash([12, 4]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.35 + pulse * 0.25})`; ctx.lineWidth = 2; }
   else { ctx.setLineDash([]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.5 + pulse * 0.3})`; ctx.lineWidth = 2; }
@@ -366,12 +401,20 @@ function drawNode(id, agent, t) {
   ctx.lineWidth = sel ? 2 : 1; ctx.stroke();
 
   const r = isInfra ? 18 : isSvc ? 14 : 22;
-  ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${sel ? 0.2 : 0.1})`; ctx.fill();
-  ctx.strokeStyle = agent.color; ctx.lineWidth = sel ? 2.5 : hov ? 2 : 1.5; ctx.stroke();
-
-  ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-  ctx.fillStyle = agent.color; ctx.fill();
+  const isSquare = agent.shape === 'square';
+  if (isSquare) {
+    ctx.beginPath(); ctx.rect(p.x - r, p.y - r, r * 2, r * 2);
+    ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${sel ? 0.2 : 0.1})`; ctx.fill();
+    ctx.strokeStyle = agent.color; ctx.lineWidth = sel ? 2.5 : hov ? 2 : 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.rect(p.x - 3, p.y - 3, 6, 6);
+    ctx.fillStyle = agent.color; ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${sel ? 0.2 : 0.1})`; ctx.fill();
+    ctx.strokeStyle = agent.color; ctx.lineWidth = sel ? 2.5 : hov ? 2 : 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = agent.color; ctx.fill();
+  }
 
   ctx.font = `500 ${sel ? 13 : 11}px 'JetBrains Mono', monospace`;
   ctx.fillStyle = agent.color; ctx.textAlign = 'center';
@@ -473,6 +516,23 @@ function updateDetailPanel() {
 
   const tsDiv = document.getElementById('dp-toolsets'); tsDiv.innerHTML = '';
   (d.toolsets || []).forEach(t => { const b = document.createElement('div'); b.className = 'platform-badge'; b.textContent = t; tsDiv.appendChild(b); });
+
+  const repoUl = document.getElementById('dp-repos'); repoUl.innerHTML = '';
+  const repos = (d.repos || []);
+  if (repos.length === 0) {
+    const li = document.createElement('li');
+    li.innerHTML = '<span style="color:var(--dim); font-style:italic;">none</span>';
+    repoUl.appendChild(li);
+  } else {
+    repos.forEach(repo => {
+      const li = document.createElement('li');
+      const age = repo.last_synced_at ? formatAgeFromIso(repo.last_synced_at) : '';
+      const ageHtml = age ? `<span class="conn-type">${age}</span>` : `<span class="conn-type">${repo.kind || ''}</span>`;
+      const link = repo.url ? `<a href="${repo.url}" target="_blank" rel="noopener" style="color:var(--repo); text-decoration:none;">${repo.name || repo.url}</a>` : (repo.name || '');
+      li.innerHTML = `<span class="conn-dot" style="background:var(--repo); border-radius: 1px;"></span>${link}${ageHtml}`;
+      repoUl.appendChild(li);
+    });
+  }
 
   const connUl = document.getElementById('dp-connections'); connUl.innerHTML = '';
   (DATA.edges || []).forEach(([from, to, type, color]) => {
