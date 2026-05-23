@@ -6,7 +6,7 @@
     "tag": "linux"
   },
   "gateway": {
-    "pid": 500851,
+    "pid": 630147,
     "state": "running"
   },
   "agents": {
@@ -26,12 +26,12 @@
     "gateway": {
       "id": "gateway",
       "label": "Hermes Gateway",
-      "sublabel": "PID 500851",
+      "sublabel": "PID 630147",
       "type": "infra",
       "color": "#00ff41",
       "machine": "linux",
       "details": {
-        "pid": 500851,
+        "pid": 630147,
         "gateway_state": "running",
         "home": "~/.hermes"
       }
@@ -63,8 +63,8 @@
       "color": "#ff8c00",
       "machine": "linux",
       "details": {
-        "model": "deepseek/deepseek-v4-flash",
-        "provider": "nous",
+        "model": "grok-4.3",
+        "provider": "xai-oauth",
         "voice": "",
         "role": "Operator / Orchestrator",
         "home": "~/.hermes",
@@ -213,7 +213,12 @@
       "peer": "Count Zer0",
       "workspace": "hermes.countzer0",
       "host_key": "hermes.countzer0"
+    },
+    {
+      "peer": "silveroak",
+      "workspace": "hermes.clu",
+      "host_key": "hermes.silveroak"
     }
   ],
-  "collected_at": "2026-05-23T12:00:36.021075+00:00"
+  "collected_at": "2026-05-23T13:00:34.879727+00:00"
 }
