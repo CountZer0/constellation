@@ -7,10 +7,17 @@ class MockD1 {
   constructor() {
     this.latest = new Map();
     this.events = [];
+    this.layout = new Map();
   }
 
   prepare(sql) {
     return new MockStatement(this, sql);
+  }
+
+  async batch(stmts) {
+    const results = [];
+    for (const s of stmts) results.push(await s.run());
+    return results;
   }
 }
 
@@ -37,12 +44,28 @@ class MockStatement {
       this.db.events.push({ machine_id, collected_at, received_at, agent_count, gateway_state, snapshot_json });
       return { success: true };
     }
+    if (this.sql.includes('INSERT INTO layout_overrides')) {
+      const [agent_id, x, y, updated_at] = this.params;
+      this.db.layout.set(agent_id, { agent_id, x, y, updated_at });
+      return { success: true };
+    }
+    if (this.sql.includes('DELETE FROM layout_overrides WHERE agent_id')) {
+      this.db.layout.delete(this.params[0]);
+      return { success: true };
+    }
+    if (this.sql.includes('DELETE FROM layout_overrides')) {
+      this.db.layout.clear();
+      return { success: true };
+    }
     throw new Error(`Unhandled SQL run: ${this.sql}`);
   }
 
   async all() {
     if (this.sql.includes('FROM latest_snapshots')) {
       return { results: [...this.db.latest.values()].sort((a, b) => a.machine_id.localeCompare(b.machine_id)) };
+    }
+    if (this.sql.includes('FROM layout_overrides')) {
+      return { results: [...this.db.layout.values()] };
     }
     throw new Error(`Unhandled SQL all: ${this.sql}`);
   }
@@ -188,5 +211,114 @@ test('mergeSnapshots: repo: ids stay shared (no machine-tag scoping)', () => {
     assert.ok(from === 'mac_count' || from === 'win_tron',
       `repo edge source must be machine-scoped agent id, got ${from}`);
   }
+});
+
+test('GET /v1/layout returns empty overrides initially', async () => {
+  const env = { DB: new MockD1() };
+  const req = new Request('https://example.test/v1/layout');
+  const res = await handleRequest(req, env);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body, { overrides: {} });
+});
+
+test('POST /v1/layout without LAYOUT_WRITE_SECRET returns 503', async () => {
+  const env = { DB: new MockD1() };
+  const req = new Request('https://example.test/v1/layout', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ overrides: { x: { x: 1, y: 2 } } }),
+  });
+  const res = await handleRequest(req, env);
+  assert.equal(res.status, 503);
+});
+
+test('POST /v1/layout with bad token returns 401', async () => {
+  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+  const req = new Request('https://example.test/v1/layout', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer wrong' },
+    body: JSON.stringify({ overrides: { x: { x: 1, y: 2 } } }),
+  });
+  const res = await handleRequest(req, env);
+  assert.equal(res.status, 401);
+});
+
+test('POST /v1/layout with good token persists overrides, GET returns them', async () => {
+  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+  const postReq = new Request('https://example.test/v1/layout', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer right' },
+    body: JSON.stringify({
+      overrides: {
+        'mac_buddha': { x: 100, y: 200 },
+        'repo:CountZer0/hermes-skills': { x: 300, y: 50 },
+      },
+    }),
+  });
+  const postRes = await handleRequest(postReq, env);
+  assert.equal(postRes.status, 200);
+  const postBody = await postRes.json();
+  assert.equal(postBody.ok, true);
+  assert.equal(postBody.written, 2);
+
+  const getRes = await handleRequest(new Request('https://example.test/v1/layout'), env);
+  const getBody = await getRes.json();
+  assert.equal(getBody.overrides['mac_buddha'].x, 100);
+  assert.equal(getBody.overrides['mac_buddha'].y, 200);
+  assert.equal(getBody.overrides['repo:CountZer0/hermes-skills'].x, 300);
+});
+
+test('POST /v1/layout rejects non-finite coords', async () => {
+  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+  const req = new Request('https://example.test/v1/layout', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer right' },
+    body: JSON.stringify({
+      overrides: {
+        ok:  { x: 1, y: 2 },
+        bad: { x: 'NaN', y: 5 },          // wrong type
+        inf: { x: Infinity, y: 0 },        // serializes to null, ignored
+      },
+    }),
+  });
+  const res = await handleRequest(req, env);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.written, 1, 'only the well-formed entry should persist');
+});
+
+test('DELETE /v1/layout/<id> removes a single override', async () => {
+  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+  await handleRequest(new Request('https://example.test/v1/layout', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer right' },
+    body: JSON.stringify({ overrides: { a: { x: 1, y: 2 }, b: { x: 3, y: 4 } } }),
+  }), env);
+  const delRes = await handleRequest(new Request('https://example.test/v1/layout/a', {
+    method: 'DELETE',
+    headers: { authorization: 'Bearer right' },
+  }), env);
+  assert.equal(delRes.status, 200);
+  const getRes = await handleRequest(new Request('https://example.test/v1/layout'), env);
+  const body = await getRes.json();
+  assert.equal(body.overrides['a'], undefined);
+  assert.equal(body.overrides['b'].x, 3);
+});
+
+test('DELETE /v1/layout (bulk) clears all overrides', async () => {
+  const env = { DB: new MockD1(), LAYOUT_WRITE_SECRET: 'right' };
+  await handleRequest(new Request('https://example.test/v1/layout', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer right' },
+    body: JSON.stringify({ overrides: { a: { x: 1, y: 2 }, b: { x: 3, y: 4 } } }),
+  }), env);
+  const delRes = await handleRequest(new Request('https://example.test/v1/layout', {
+    method: 'DELETE',
+    headers: { authorization: 'Bearer right' },
+  }), env);
+  assert.equal(delRes.status, 200);
+  const body = await (await handleRequest(new Request('https://example.test/v1/layout'), env)).json();
+  assert.deepEqual(body, { overrides: {} });
 });
 

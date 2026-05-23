@@ -126,6 +126,10 @@
   <div class="legend-item"><div class="legend-line" style="background: var(--repo);"></div> Repo Link</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--yellow);"></div> Stale Machine</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--dim);"></div> Offline Machine</div>
+  <div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border); display:flex; gap:10px; font-size:9px;">
+    <a href="#" id="reset-layout" style="color:var(--cyan); text-decoration:none;">[reset layout]</a>
+    <a href="#" id="configure-sync" style="color:var(--purple); text-decoration:none;">[sync settings]</a>
+  </div>
 </div>
 
 <div class="status-bar" id="status-bar"></div>
@@ -137,6 +141,103 @@
 
 // Telemetry endpoint — set to '' to load the committed agents.json instead
 const AGENTS_URL = 'https://constellation-telemetry.count-zr0.workers.dev/agents.json' || 'agents.json';
+const LAYOUT_URL = 'https://constellation-telemetry.count-zr0.workers.dev/v1/layout';
+
+// ─── Layout overrides (drag-to-place) ──────────────────────────────────────
+// Shape: { agent_id: { x, y } } in WORLD coordinates.
+// Persists in localStorage immediately; also synced to the Worker if a
+// LAYOUT_WRITE_TOKEN is configured by the user (saved in localStorage).
+const LOCAL_KEY = 'constellation_layout_v1';
+const TOKEN_KEY = 'constellation_layout_token';
+let layoutOverrides = {};
+let pendingSync = null;
+
+function loadLocalOverrides() {
+  try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}') || {}; }
+  catch { return {}; }
+}
+function saveLocalOverrides() {
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(layoutOverrides)); } catch {}
+}
+function getLayoutToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
+}
+function setLayoutToken(t) {
+  try { if (t) localStorage.setItem(TOKEN_KEY, t); else localStorage.removeItem(TOKEN_KEY); } catch {}
+}
+
+async function fetchServerOverrides() {
+  try {
+    const resp = await fetch(LAYOUT_URL, { cache: 'no-cache' });
+    if (!resp.ok) return null;
+    const body = await resp.json();
+    return body.overrides || {};
+  } catch { return null; }
+}
+
+function queueServerSync() {
+  const token = getLayoutToken();
+  if (!token) return; // sync not configured — localStorage only
+  if (pendingSync) clearTimeout(pendingSync);
+  pendingSync = setTimeout(async () => {
+    pendingSync = null;
+    try {
+      const resp = await fetch(LAYOUT_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'authorization': `Bearer ${token}` },
+        body: JSON.stringify({ overrides: layoutOverrides }),
+      });
+      if (resp.status === 401) {
+        flashStatus('sync: bad token', 'offline');
+      } else if (resp.status === 503) {
+        flashStatus('sync: not configured on worker', 'offline');
+      } else if (!resp.ok) {
+        flashStatus(`sync: HTTP ${resp.status}`, 'offline');
+      } else {
+        flashStatus('sync: saved', 'fresh');
+      }
+    } catch (e) {
+      flashStatus('sync: offline', 'offline');
+    }
+  }, 600);
+}
+
+function flashStatus(text, klass) {
+  const el = document.getElementById('status-bar');
+  if (!el) return;
+  el.innerHTML = `<span class="${klass || 'fresh'}">●</span> ${text}`;
+}
+
+async function resetAllLayout() {
+  layoutOverrides = {};
+  saveLocalOverrides();
+  layoutGraph();
+  const token = getLayoutToken();
+  if (token) {
+    try {
+      await fetch(LAYOUT_URL, { method: 'DELETE', headers: { authorization: `Bearer ${token}` } });
+      flashStatus('layout reset (synced)', 'fresh');
+    } catch { flashStatus('layout reset (local only)', 'offline'); }
+  } else {
+    flashStatus('layout reset', 'fresh');
+  }
+}
+
+function configureSyncToken() {
+  const current = getLayoutToken();
+  const next = window.prompt(
+    'Paste LAYOUT_WRITE_SECRET to sync drag positions across devices.\nLeave blank to clear and use localStorage only.',
+    current,
+  );
+  if (next === null) return; // cancelled
+  setLayoutToken(next.trim());
+  if (next.trim()) {
+    flashStatus('sync token saved', 'fresh');
+    queueServerSync(); // push current overrides immediately
+  } else {
+    flashStatus('sync disabled', 'offline');
+  }
+}
 
 let DATA = null;
 let selectedAgent = null;
@@ -160,9 +261,21 @@ async function loadData(retries = 3) {
       const resp = await fetch(AGENTS_URL, { cache: 'no-cache' });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       DATA = await resp.json();
+      // Local overrides first so the initial render uses what the user saved.
+      layoutOverrides = loadLocalOverrides();
       updateHeader();
       layoutGraph();
       render();
+      // Async overlay from server (last-writer-wins for keys present on both).
+      fetchServerOverrides().then(server => {
+        if (!server) return;
+        const merged = { ...layoutOverrides, ...server };
+        if (JSON.stringify(merged) !== JSON.stringify(layoutOverrides)) {
+          layoutOverrides = merged;
+          saveLocalOverrides();
+          layoutGraph();
+        }
+      });
       return;
     } catch (e) {
       console.warn(`loadData attempt ${i+1}/${retries}: ${e.message}`);
@@ -277,6 +390,14 @@ function layoutGraph() {
         y: bandY,
       };
     });
+  }
+
+  // Overlay user-placed positions on top of the computed layout. Keys that
+  // don't match a current node id are silently ignored (stale).
+  for (const [id, pos] of Object.entries(layoutOverrides)) {
+    if (positions[id] && pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+      positions[id] = { x: pos.x, y: pos.y };
+    }
   }
 }
 
@@ -522,15 +643,31 @@ canvas.addEventListener('wheel', (e) => {
   view.scale = newScale;
 }, { passive: false });
 
-// ─── Drag-to-pan on empty space ────────────────────────────────────────────
-let dragState = null;
+// ─── Drag-to-pan on empty space, drag-to-move on a node ────────────────────
+let dragState = null;   // pan state
+let nodeDrag = null;    // { id, moved } when dragging a node
 canvas.addEventListener('mousedown', (e) => {
   if (e.button !== 0) return;
-  if (hitTest(e.clientX, e.clientY)) return; // let clicks through to nodes
+  const hit = hitTest(e.clientX, e.clientY);
+  if (hit) {
+    nodeDrag = { id: hit, moved: false };
+    canvas.style.cursor = 'grabbing';
+    return;
+  }
   dragState = { x: e.clientX, y: e.clientY, moved: false };
   canvas.style.cursor = 'grabbing';
 });
 window.addEventListener('mousemove', (e) => {
+  if (nodeDrag) {
+    const p = positions[nodeDrag.id]; if (!p) return;
+    // Convert screen-delta to world-delta by dividing by scale.
+    // Easiest: compute the world target each frame from the cursor.
+    const w = screenToWorld(e.clientX, e.clientY);
+    if (Math.abs(w.x - p.x) + Math.abs(w.y - p.y) > 1) nodeDrag.moved = true;
+    p.x = w.x;
+    p.y = w.y;
+    return;
+  }
   if (!dragState) return;
   const dx = e.clientX - dragState.x;
   const dy = e.clientY - dragState.y;
@@ -541,8 +678,21 @@ window.addEventListener('mousemove', (e) => {
   dragState.y = e.clientY;
 });
 window.addEventListener('mouseup', () => {
+  if (nodeDrag) {
+    if (nodeDrag.moved) {
+      const p = positions[nodeDrag.id];
+      layoutOverrides[nodeDrag.id] = { x: p.x, y: p.y };
+      saveLocalOverrides();
+      queueServerSync();
+      // Suppress the trailing click so a drag doesn't also toggle selection.
+      const blocker = (e) => { e.stopPropagation(); window.removeEventListener('click', blocker, true); };
+      window.addEventListener('click', blocker, true);
+    }
+    nodeDrag = null;
+    canvas.style.cursor = 'default';
+    return;
+  }
   if (!dragState) return;
-  // If the user actually dragged, suppress the click that follows.
   const moved = dragState.moved;
   dragState = null;
   canvas.style.cursor = 'default';
@@ -617,6 +767,21 @@ window.addEventListener('resize', resize);
 resize();
 // Defer initial fetch past page-load network warmup
 setTimeout(loadData, 50);
+
+document.getElementById('reset-layout').addEventListener('click', (e) => {
+  e.preventDefault();
+  if (window.confirm('Reset all dragged positions to the computed layout?')) resetAllLayout();
+});
+document.getElementById('configure-sync').addEventListener('click', (e) => {
+  e.preventDefault(); configureSyncToken();
+});
+window.addEventListener('keydown', (e) => {
+  // Ignore when typing in an input/textarea.
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  if (e.key === 'r' || e.key === 'R') {
+    if (window.confirm('Reset all dragged positions?')) resetAllLayout();
+  }
+});
 
 // Auto-refresh every 60 seconds
 setInterval(async () => {

@@ -21,3 +21,10 @@ CREATE TABLE IF NOT EXISTS snapshot_events (
 
 CREATE INDEX IF NOT EXISTS idx_snapshot_events_machine_received
   ON snapshot_events(machine_id, received_at DESC);
+
+CREATE TABLE IF NOT EXISTS layout_overrides (
+  agent_id   TEXT PRIMARY KEY,
+  x          REAL NOT NULL,
+  y          REAL NOT NULL,
+  updated_at TEXT NOT NULL
+);

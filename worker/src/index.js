@@ -42,6 +42,23 @@ export async function handleRequest(request, env, ctx = {}, now = new Date()) {
     return json(mergeSnapshots(snapshots.map((s) => s.snapshot), now));
   }
 
+  if (request.method === 'GET' && url.pathname === '/v1/layout') {
+    return handleLayoutGet(env);
+  }
+
+  if (request.method === 'POST' && url.pathname === '/v1/layout') {
+    return handleLayoutPost(request, env, now);
+  }
+
+  if (request.method === 'DELETE' && url.pathname === '/v1/layout') {
+    return handleLayoutDelete(request, env);
+  }
+
+  const layoutItemMatch = url.pathname.match(/^\/v1\/layout\/([^/]+)$/);
+  if (request.method === 'DELETE' && layoutItemMatch) {
+    return handleLayoutDeleteOne(request, env, decodeURIComponent(layoutItemMatch[1]));
+  }
+
   const match = url.pathname.match(/^\/v1\/snapshots\/([^/]+)$/);
   if (request.method === 'POST' && match) {
     return handleSnapshotPost(request, env, decodeURIComponent(match[1]), now);
@@ -306,6 +323,75 @@ function secretForMachine(env, machine) {
   }
 }
 
+
+async function handleLayoutGet(env) {
+  const rows = await env.DB.prepare(
+    'SELECT agent_id, x, y, updated_at FROM layout_overrides'
+  ).all();
+  const overrides = {};
+  for (const row of rows.results || []) {
+    overrides[row.agent_id] = { x: row.x, y: row.y, updated_at: row.updated_at };
+  }
+  return json({ overrides });
+}
+
+async function handleLayoutPost(request, env, now) {
+  const authError = requireLayoutAuth(request, env);
+  if (authError) return authError;
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid_json' }, { status: 400 });
+  }
+  const overrides = body && typeof body === 'object' ? body.overrides : null;
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    return json({ error: 'overrides_required' }, { status: 400 });
+  }
+  const updatedAt = now.toISOString();
+  const stmts = [];
+  let written = 0;
+  for (const [agentId, pos] of Object.entries(overrides)) {
+    if (typeof agentId !== 'string' || !agentId.trim()) continue;
+    if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;
+    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
+    stmts.push(env.DB.prepare(
+      `INSERT INTO layout_overrides (agent_id, x, y, updated_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(agent_id) DO UPDATE SET
+         x=excluded.x, y=excluded.y, updated_at=excluded.updated_at`
+    ).bind(agentId, pos.x, pos.y, updatedAt));
+    written += 1;
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return json({ ok: true, written, updated_at: updatedAt });
+}
+
+async function handleLayoutDelete(request, env) {
+  const authError = requireLayoutAuth(request, env);
+  if (authError) return authError;
+  await env.DB.prepare('DELETE FROM layout_overrides').run();
+  return json({ ok: true, cleared: true });
+}
+
+async function handleLayoutDeleteOne(request, env, agentId) {
+  const authError = requireLayoutAuth(request, env);
+  if (authError) return authError;
+  await env.DB.prepare('DELETE FROM layout_overrides WHERE agent_id = ?').bind(agentId).run();
+  return json({ ok: true, deleted: agentId });
+}
+
+function requireLayoutAuth(request, env) {
+  const secret = env.LAYOUT_WRITE_SECRET;
+  if (!secret) return json({ error: 'sync_not_configured' }, { status: 503 });
+  const header = request.headers.get('authorization') || '';
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match || !timingSafeEqual(match[1], secret)) {
+    return json({ error: 'unauthorized' }, { status: 401 });
+  }
+  return null;
+}
+
 export async function bodySha256Hex(body) {
   const bytes = typeof body === 'string' ? encoder.encode(body) : body;
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -359,8 +445,8 @@ function corsResponse(body, init = {}) {
     ...init,
     headers: {
       'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, POST, OPTIONS',
-      'access-control-allow-headers': 'Content-Type, X-Constellation-Machine, X-Constellation-Timestamp, X-Constellation-Signature',
+      'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
+      'access-control-allow-headers': 'Content-Type, X-Constellation-Machine, X-Constellation-Timestamp, X-Constellation-Signature, Authorization',
       'cache-control': 'no-store',
       ...(init.headers || {}),
     },
