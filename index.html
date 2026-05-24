@@ -8,9 +8,9 @@
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Share+Tech+Mono&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
-    --bg: #0a0a0f;
-    --bg-panel: #0d0d14;
-    --border: #1a1a2e;
+    --bg: #26263a;
+    --bg-panel: #2c2c42;
+    --border: #3d3d5c;
     --text: #c0c0c0;
     --green: #00ff41;
     --cyan: #00e5ff;
@@ -303,13 +303,22 @@ function layoutGraph() {
   const h = window.innerHeight;
   const agents = DATA.agents || {};
 
-  // Group agents by machine; shared repo nodes are unanchored and rendered
-  // in a top "shared" band spanning the full width.
+  // Group agents by machine. Shared repo nodes and outbound service nodes
+  // (Discord/Telegram/Webhook/etc.) live outside the boxes in top bands.
   const byMachine = {};
   const sharedRepoNodes = [];
+  const outboundServiceNodes = [];
+  const seenServiceIds = new Set();
   for (const [id, agent] of Object.entries(agents)) {
     if (id.startsWith('repo:')) {
       sharedRepoNodes.push({ id, ...agent });
+      continue;
+    }
+    if (agent.type === 'service') {
+      if (!seenServiceIds.has(id)) {
+        seenServiceIds.add(id);
+        outboundServiceNodes.push({ id, ...agent });
+      }
       continue;
     }
     const m = agent.machine || 'unknown';
@@ -326,54 +335,68 @@ function layoutGraph() {
   positions = {};
   machineZones = {};
 
+  // Reserve a top region for the outbound bands (repos + services) so the
+  // machine boxes sit below them rather than overlapping.
+  const bandReserve = (sharedRepoNodes.length > 0 ? 50 : 0)
+                    + (outboundServiceNodes.length > 0 ? 60 : 0)
+                    + 80;
+  const availH = h - bandReserve - 40;
+  const zoneHeight = Math.round(Math.min(440, Math.max(260, availH)));
+  const cy = Math.round(bandReserve + zoneHeight / 2);
+
   machines.forEach((m, mi) => {
     const cx = startX + mi * zoneWidth;
-    const cy = h / 2;
-    machineZones[m] = { cx: Math.round(cx), cy: Math.round(cy), w: Math.round(zoneWidth - 20), h: Math.round(Math.min(440, h - 100)) };
+    machineZones[m] = { cx: Math.round(cx), cy: cy, w: Math.round(zoneWidth - 20), h: zoneHeight };
 
     const nodes = byMachine[m];
     const infra = nodes.filter(n => n.type === 'infra');
     const agentNodes = nodes.filter(n => n.type === 'agent');
-    const services = nodes.filter(n => n.type === 'service');
 
-    // Position infra
+    const halfW = machineZones[m].w / 2;
+    const halfH = machineZones[m].h / 2;
+    const top = cy - halfH;
+    const innerH = halfH * 2 - 60;
+    const levelY = (frac) => Math.round(top + 30 + innerH * frac);
+
     const host = infra.find(n => n.label === 'HOST');
     const gw = infra.find(n => n.label?.includes('Gateway'));
-
-    if (host) positions[host.id] = { x: Math.round(cx), y: Math.round(cy - 20) };
-    if (gw) positions[gw.id] = { x: Math.round(cx + (mi % 2 === 0 ? -140 : 140)), y: Math.round(cy - 150) };
-
-    // Position default agent (sublabel [default])
     const def = agentNodes.find(n => n.sublabel === '[default]');
-    if (def) positions[def.id] = { x: Math.round(cx), y: Math.round(cy - 80) };
-
-    // Position sub-profiles in arc
     const subs = agentNodes.filter(n => n.sublabel !== '[default]');
-    subs.forEach((s, si) => {
-      const angle = -Math.PI/3 + (si / Math.max(subs.length - 1, 1)) * Math.PI * 0.8;
-      const r = 140;
-      positions[s.id] = {
-        x: Math.round(cx + Math.cos(angle) * r * (mi % 2 === 0 ? 1 : -1)),
-        y: Math.round(cy + 40 + Math.sin(angle) * r * 0.5)
-      };
-    });
 
-    // Position services
-    services.forEach((s, si) => {
-      positions[s.id] = { x: Math.round(cx + (si - (services.length-1)/2) * 100), y: Math.round(cy - 250) };
+    if (gw) positions[gw.id] = {
+      x: Math.round(cx + (mi % 2 === 0 ? -1 : 1) * Math.min(120, halfW * 0.55)),
+      y: levelY(0.12),
+    };
+    if (def) positions[def.id] = { x: Math.round(cx), y: levelY(0.34) };
+    if (host) positions[host.id] = { x: Math.round(cx), y: levelY(0.58) };
+
+    // Sub-profiles arc along the bottom of the box
+    subs.forEach((s, si) => {
+      const angle = -Math.PI + (si / Math.max(subs.length - 1, 1)) * Math.PI;
+      const r = Math.min(120, halfW * 0.6);
+      positions[s.id] = {
+        x: Math.round(cx + Math.cos(angle) * r),
+        y: Math.round(levelY(0.88) + Math.sin(angle) * r * 0.25),
+      };
     });
   });
 
-  // Shared repo nodes — horizontal band across the top of the canvas.
+  // Top outbound bands — repos on the first row, services on the second.
+  const bandLeft = 40;
+  const bandRight = w - 40;
+  const bandWidth = bandRight - bandLeft;
   if (sharedRepoNodes.length > 0) {
-    const totalW = w - 80;
-    const step = totalW / Math.max(sharedRepoNodes.length, 1);
+    const step = bandWidth / Math.max(sharedRepoNodes.length, 1);
     const bandY = 90;
     sharedRepoNodes.forEach((n, i) => {
-      positions[n.id] = {
-        x: Math.round(40 + step * (i + 0.5)),
-        y: bandY,
-      };
+      positions[n.id] = { x: Math.round(bandLeft + step * (i + 0.5)), y: bandY };
+    });
+  }
+  if (outboundServiceNodes.length > 0) {
+    const step = bandWidth / Math.max(outboundServiceNodes.length, 1);
+    const bandY = (sharedRepoNodes.length > 0 ? 160 : 100);
+    outboundServiceNodes.forEach((n, i) => {
+      positions[n.id] = { x: Math.round(bandLeft + step * (i + 0.5)), y: bandY };
     });
   }
 
@@ -448,12 +471,12 @@ function drawMachineZone(zone, color, label, t) {
   const rgb = hexToRgb(color);
   const pulse = (Math.sin(t * 0.5) + 1) / 2;
   ctx.setLineDash([6, 8]);
-  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.08 + pulse * 0.04})`;
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.32 + pulse * 0.12})`;
+  ctx.lineWidth = 1.5;
   ctx.strokeRect(zone.cx - zone.w/2, zone.cy - zone.h/2, zone.w, zone.h);
   ctx.setLineDash([]);
   ctx.font = "400 10px 'Share Tech Mono', monospace";
-  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.3)`;
+  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.55)`;
   ctx.textAlign = 'left';
   ctx.fillText(label, zone.cx - zone.w/2 + 12, zone.cy - zone.h/2 + 16);
 }
@@ -495,6 +518,65 @@ function drawEdge(from, to, color, type, t) {
   }
 }
 
+function drawTerminalIcon(x, y, r, color, rgb, sel, hov, t) {
+  // CRT-monitor-on-a-stand glyph used for HOST nodes.
+  const w = r * 2.0;
+  const h = r * 1.5;
+  const screenX = x - w / 2;
+  const screenY = y - h / 2 - 2;
+  const stroke = sel ? 2.5 : hov ? 2 : 1.5;
+
+  // Monitor body
+  ctx.beginPath();
+  ctx.rect(screenX, screenY, w, h);
+  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${sel ? 0.18 : 0.1})`;
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = stroke;
+  ctx.stroke();
+
+  // Inner screen bezel
+  const pad = 3;
+  ctx.beginPath();
+  ctx.rect(screenX + pad, screenY + pad, w - pad * 2, h - pad * 2);
+  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.4)`;
+  ctx.lineWidth = 0.75;
+  ctx.stroke();
+
+  // Blinking prompt
+  const blink = Math.sin(t * 3) > 0;
+  if (blink) {
+    const cw = r * 0.32, ch = 2;
+    ctx.fillStyle = color;
+    ctx.fillRect(screenX + pad + 3, screenY + h - pad - 4, cw, ch);
+  }
+  // Prompt caret
+  ctx.font = `700 ${Math.round(r * 0.55)}px 'Share Tech Mono', monospace`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('>', screenX + pad + 2, screenY + h / 2 - 1);
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'center';
+
+  // Stand
+  const standY = screenY + h;
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.35, standY);
+  ctx.lineTo(x - r * 0.55, standY + r * 0.45);
+  ctx.lineTo(x + r * 0.55, standY + r * 0.45);
+  ctx.lineTo(x + r * 0.35, standY);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = stroke * 0.8;
+  ctx.stroke();
+
+  // Base bar
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.7, standY + r * 0.5);
+  ctx.lineTo(x + r * 0.7, standY + r * 0.5);
+  ctx.stroke();
+}
+
 function drawNode(id, agent, t) {
   const p = positions[id]; if (!p) return;
   const sel = selectedAgent === id, hov = hoveredAgent === id;
@@ -515,7 +597,10 @@ function drawNode(id, agent, t) {
 
   const r = isInfra ? 18 : isSvc ? 14 : 22;
   const isSquare = agent.shape === 'square';
-  if (isSquare) {
+  const isHost = isInfra && agent.label === 'HOST';
+  if (isHost) {
+    drawTerminalIcon(p.x, p.y, r, agent.color, rgb, sel, hov, t);
+  } else if (isSquare) {
     ctx.beginPath(); ctx.rect(p.x - r, p.y - r, r * 2, r * 2);
     ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${sel ? 0.2 : 0.1})`; ctx.fill();
     ctx.strokeStyle = agent.color; ctx.lineWidth = sel ? 2.5 : hov ? 2 : 1.5; ctx.stroke();
@@ -555,7 +640,8 @@ function render() {
   if (!DATA) return;
   const w = window.innerWidth, h = window.innerHeight;
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#0a0a0f'; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#26263a';
+  ctx.fillRect(0, 0, w, h);
 
   drawGrid();
   drawScanline(time);
@@ -723,7 +809,8 @@ function updateDetailPanel() {
       const age = repo.last_synced_at ? formatAgeFromIso(repo.last_synced_at) : '';
       const ageHtml = age ? `<span class="conn-type">${age}</span>` : `<span class="conn-type">${repo.kind || ''}</span>`;
       const link = repo.url ? `<a href="${repo.url}" target="_blank" rel="noopener" style="color:var(--repo); text-decoration:none;">${repo.name || repo.url}</a>` : (repo.name || '');
-      li.innerHTML = `<span class="conn-dot" style="background:var(--repo); border-radius: 1px;"></span>${link}${ageHtml}`;
+      const symHtml = repo.symlinked ? ` <span title="symlinked to default profile" style="color:var(--dim); font-size:9px;">↪ symlink</span>` : '';
+      li.innerHTML = `<span class="conn-dot" style="background:var(--repo); border-radius: 1px;"></span>${link}${symHtml}${ageHtml}`;
       repoUl.appendChild(li);
     });
   }

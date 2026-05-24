@@ -315,9 +315,9 @@ def discover_filesystem_repos(scan_root, max_depth=3):
         return []
     repos = []
     seen = set()
-    queue = [(scan_root, 0)]
+    queue = [(scan_root, 0, False)]
     while queue:
-        path, depth = queue.pop(0)
+        path, depth, via_symlink = queue.pop(0)
         if depth > max_depth:
             continue
         git_dir = path / ".git"
@@ -342,13 +342,14 @@ def discover_filesystem_repos(scan_root, max_depth=3):
                     "source": "filesystem",
                     "path": rel,
                     "remote": remote["name"],
+                    "symlinked": via_symlink,
                 })
             # Don't descend into a repo
             continue
         try:
             for child in sorted(path.iterdir()):
                 if child.is_dir() and not child.name.startswith("."):
-                    queue.append((child, depth + 1))
+                    queue.append((child, depth + 1, via_symlink or child.is_symlink()))
         except (PermissionError, OSError):
             continue
     return repos
@@ -718,8 +719,13 @@ def collect(machine_tag=None, default_name=None):
     # ── Shared repo nodes + edges (stash-sync hubs, constellation) ──
     # Repos with SHARED_REPO_KINDS surface as repo:<owner>/<name> nodes that
     # the Worker merges across machines via its SHARED_SERVICES set.
+    # Only the default agent on each machine wires to the shared hub; sub-profile
+    # skills dirs are symlinks back to the default profile, so emitting edges
+    # from them would just fan out duplicate lines to the same hub.
     for agent_id, agent in list(agents.items()):
         if agent.get("type") != "agent":
+            continue
+        if agent_id != default_id:
             continue
         for repo in (agent.get("details", {}).get("repos") or []):
             kind = repo.get("kind")
