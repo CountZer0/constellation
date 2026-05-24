@@ -630,7 +630,9 @@ function drawNode(id, agent, t) {
 }
 
 function drawScanline(t) {
-  const h = window.innerHeight, y = (t * 50) % h;
+  const h = window.innerHeight;
+  if (!h) return;
+  const y = (t * 50) % h;
   const grad = ctx.createLinearGradient(0, y - 2, 0, y + 2);
   grad.addColorStop(0, 'transparent'); grad.addColorStop(0.5, 'rgba(0,229,255,0.03)'); grad.addColorStop(1, 'transparent');
   ctx.fillStyle = grad; ctx.fillRect(0, y - 2, window.innerWidth, 4);
