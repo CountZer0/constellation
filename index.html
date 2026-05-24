@@ -65,9 +65,16 @@
   .platforms { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .platform-badge { font-size: 9px; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--border); color: var(--dim); }
   .platform-badge.active { border-color: var(--green); color: var(--green); background: rgba(0,255,65,0.08); }
-  .legend { position: fixed; bottom: 16px; left: 16px; background: rgba(13,13,20,0.9); border: 1px solid var(--border); padding: 12px 16px; border-radius: 4px; z-index: 50; }
-  .legend h4 { font-size: 9px; color: var(--purple); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+  .legend { position: fixed; bottom: 16px; left: 16px; background: rgba(13,13,20,0.9); border: 1px solid var(--border); padding: 12px 16px; border-radius: 4px; z-index: 50; width: fit-content; max-width: 200px; }
+  .legend h4 { font-size: 9px; color: var(--purple); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; cursor: pointer; user-select: none; }
+  .legend h4::before { content: "▾ "; display: inline-block; width: 10px; font-size: 8px; }
+  .legend.collapsed h4::before { content: "▸ "; }
+  .legend.collapsed { padding: 8px 14px; }
+  .legend.collapsed h4 { margin-bottom: 0; }
+  .legend.collapsed > *:not(h4) { display: none; }
   .legend-item { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--dim); margin-bottom: 4px; }
+  .legend-footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 9px; color: var(--dim); }
+  .legend-footer a { color: var(--cyan); text-decoration: none; margin-right: 8px; }
   .legend-line { width: 24px; height: 2px; border-radius: 1px; }
   .legend-circle { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; }
   .status-bar { position: fixed; bottom: 16px; right: 360px; font-size: 9px; color: var(--dim); z-index: 50; }
@@ -126,9 +133,9 @@
   <div class="legend-item"><div class="legend-line" style="background: var(--repo);"></div> Repo Link</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--yellow);"></div> Stale Machine</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--dim);"></div> Offline Machine</div>
-  <div style="margin-top:10px; padding-top:8px; border-top:1px solid var(--border); display:flex; gap:10px; font-size:9px;">
-    <a href="#" id="reset-layout" style="color:var(--cyan); text-decoration:none;">[reset layout]</a>
-    <span style="color:var(--dim);">drag any node — synced across devices</span>
+  <div class="legend-footer">
+    <a href="#" id="reset-layout">[reset layout]</a>
+    <span>drag any node — synced across devices</span>
   </div>
 </div>
 
@@ -846,6 +853,15 @@ setTimeout(loadData, 50);
 document.getElementById('reset-layout').addEventListener('click', (e) => {
   e.preventDefault();
   if (window.confirm('Reset all dragged positions to the computed layout?')) resetAllLayout();
+});
+
+// Legend collapse — click the heading to toggle; persists per browser.
+const LEGEND_COLLAPSED_KEY = 'constellation_legend_collapsed_v1';
+const legendEl = document.querySelector('.legend');
+try { if (localStorage.getItem(LEGEND_COLLAPSED_KEY) === '1') legendEl.classList.add('collapsed'); } catch {}
+legendEl.querySelector('h4').addEventListener('click', () => {
+  legendEl.classList.toggle('collapsed');
+  try { localStorage.setItem(LEGEND_COLLAPSED_KEY, legendEl.classList.contains('collapsed') ? '1' : '0'); } catch {}
 });
 window.addEventListener('keydown', (e) => {
   // Ignore when typing in an input/textarea.
