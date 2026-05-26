@@ -385,9 +385,16 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
     console.log('refreshLangfuseAggregate: missing Langfuse env, skipping');
     return { ok: false, reason: 'missing_env' };
   }
+  const hostTrimmed = String(host).trim().replace(/\/+$/, '');
+  let parsedHost;
+  try { parsedHost = new URL(hostTrimmed); } catch { parsedHost = null; }
+  if (!parsedHost || !/^https?:$/.test(parsedHost.protocol)) {
+    console.log(`refreshLangfuseAggregate: malformed LANGFUSE_HOST (length=${String(host).length} prefix=${JSON.stringify(String(host).slice(0, 40))})`);
+    return { ok: false, reason: 'bad_host' };
+  }
   const from = new Date(now.getTime() - 30 * 86400 * 1000).toISOString();
   const to   = now.toISOString();
-  const endpoint = `${host.replace(/\/$/, '')}/api/public/metrics/daily?fromTimestamp=${encodeURIComponent(from)}&toTimestamp=${encodeURIComponent(to)}`;
+  const endpoint = `${hostTrimmed}/api/public/metrics/daily?fromTimestamp=${encodeURIComponent(from)}&toTimestamp=${encodeURIComponent(to)}`;
   const auth = `Basic ${btoa(`${pub}:${secret}`)}`;
 
   let res;
