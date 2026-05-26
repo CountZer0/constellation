@@ -21,6 +21,11 @@ export default {
   async fetch(request, env, ctx) {
     return handleRequest(request, env, ctx);
   },
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(refreshLangfuseAggregate(env));
+    // Phase D will add: ctx.waitUntil(refreshLangfusePerAgent(env));
+    // Phase B will add: ctx.waitUntil(refreshDiscordGuilds(env));
+  },
 };
 
 export async function handleRequest(request, env, ctx = {}, now = new Date()) {
@@ -38,8 +43,15 @@ export async function handleRequest(request, env, ctx = {}, now = new Date()) {
   }
 
   if (request.method === 'GET' && url.pathname === '/agents.json') {
-    const snapshots = await loadSnapshots(env.DB);
-    return json(mergeSnapshots(snapshots.map((s) => s.snapshot), now));
+    const [snapshots, usageRows] = await Promise.all([
+      loadSnapshots(env.DB),
+      loadUsageRows(env.DB, '__aggregate__', 35),
+    ]);
+    return json(mergeSnapshots(snapshots.map((s) => s.snapshot), now, usageRows));
+  }
+
+  if (request.method === 'GET' && url.pathname === '/v1/usage') {
+    return handleUsageGet(url, env, now);
   }
 
   if (request.method === 'GET' && url.pathname === '/v1/layout') {
@@ -155,7 +167,7 @@ async function loadSnapshots(db) {
 export function validateSnapshot(data) {
   const errors = [];
   if (!data || typeof data !== 'object' || Array.isArray(data)) return ['snapshot must be an object'];
-  if (data.schema_version !== 1) errors.push('schema_version must be 1');
+  if (![1, 2].includes(data.schema_version)) errors.push('schema_version must be 1 or 2');
   if (!isObject(data.machine)) {
     errors.push('machine must be an object');
   } else {
@@ -191,7 +203,7 @@ export function validateSnapshot(data) {
   return errors;
 }
 
-export function mergeSnapshots(dataList, now = new Date()) {
+export function mergeSnapshots(dataList, now = new Date(), usageRows = []) {
   const merged = {
     schema_version: SCHEMA_VERSION,
     generated_at: now.toISOString(),
@@ -255,7 +267,197 @@ export function mergeSnapshots(dataList, now = new Date()) {
     }
   }
 
+  if (usageRows && usageRows.length) injectUsage(merged, usageRows);
+
   return merged;
+}
+
+export function injectUsage(merged, usageRows) {
+  const aggregateRows = usageRows.filter((r) => r.agent_id === '__aggregate__');
+  if (aggregateRows.length) {
+    const r24 = computeRollup(aggregateRows, 1);
+    const r7  = computeRollup(aggregateRows, 7);
+    const r30 = computeRollup(aggregateRows, 30);
+    const rAll = computeRollup(aggregateRows, null);
+    merged.meta = {
+      ...(merged.meta || {}),
+      usage_24h: {
+        total_tokens: r24.totals.total_tokens,
+        cost_usd: r24.totals.cost_usd,
+        input_tokens: r24.totals.input_tokens,
+        output_tokens: r24.totals.output_tokens,
+      },
+      usage_aggregate: {
+        '24h': r24.totals,
+        '7d':  r7.totals,
+        '30d': r30.totals,
+        all:   rAll.totals,
+        daily: rAll.daily,
+      },
+    };
+  }
+  // Phase D will populate merged.agents[id].details.usage here.
+}
+
+export function computeRollup(rows, windowDays) {
+  const sorted = [...rows].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
+  let filtered = sorted;
+  if (windowDays != null) {
+    // windowDays = N → include today and the (N-1) days before it
+    const cutoff = new Date(Date.now() - (windowDays - 1) * 86400 * 1000);
+    const cutoffDay = cutoff.toISOString().slice(0, 10);
+    filtered = sorted.filter((r) => r.day >= cutoffDay);
+  }
+  const totals = {
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+    cost_usd: 0,
+    trace_count: 0,
+  };
+  for (const r of filtered) {
+    totals.input_tokens  += r.input_tokens  || 0;
+    totals.output_tokens += r.output_tokens || 0;
+    totals.total_tokens  += r.total_tokens  || 0;
+    totals.cost_usd      += r.cost_usd      || 0;
+    totals.trace_count   += r.trace_count   || 0;
+  }
+  const daily = sorted.map((r) => ({
+    day: r.day,
+    total_tokens: r.total_tokens || 0,
+    cost_usd: r.cost_usd || 0,
+  }));
+  return { totals, daily };
+}
+
+export async function loadUsageRows(db, agentId = null, days = 35) {
+  const cutoffDay = new Date(Date.now() - days * 86400 * 1000).toISOString().slice(0, 10);
+  let stmt;
+  if (agentId) {
+    stmt = db.prepare(
+      `SELECT agent_id, day, input_tokens, output_tokens, total_tokens, cost_usd, trace_count, model_breakdown, fetched_at
+       FROM usage_daily WHERE agent_id = ? AND day >= ? ORDER BY day ASC`
+    ).bind(agentId, cutoffDay);
+  } else {
+    stmt = db.prepare(
+      `SELECT agent_id, day, input_tokens, output_tokens, total_tokens, cost_usd, trace_count, model_breakdown, fetched_at
+       FROM usage_daily WHERE day >= ? ORDER BY agent_id ASC, day ASC`
+    ).bind(cutoffDay);
+  }
+  const rows = await stmt.all();
+  return rows.results || [];
+}
+
+async function handleUsageGet(url, env, now) {
+  const param = url.searchParams.get('window') || '24h';
+  const windowMap = { '24h': 1, '7d': 7, '30d': 30, 'all': null };
+  if (!(param in windowMap)) {
+    return json({ error: 'invalid_window', allowed: Object.keys(windowMap) }, { status: 400 });
+  }
+  const rows = await loadUsageRows(env.DB, '__aggregate__', 35);
+  const main = computeRollup(rows, windowMap[param]);
+  const by_window = {};
+  for (const [name, days] of Object.entries(windowMap)) {
+    by_window[name] = computeRollup(rows, days).totals;
+  }
+  return json({
+    window: param,
+    as_of: now.toISOString(),
+    totals: main.totals,
+    daily: main.daily,
+    by_window,
+    by_agent: {},
+  });
+}
+
+export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new Date()) {
+  const host   = env.LANGFUSE_HOST;
+  const pub    = env.LANGFUSE_PUBLIC_KEY;
+  const secret = env.LANGFUSE_SECRET_KEY;
+  if (!host || !pub || !secret) {
+    console.log('refreshLangfuseAggregate: missing Langfuse env, skipping');
+    return { ok: false, reason: 'missing_env' };
+  }
+  const from = new Date(now.getTime() - 30 * 86400 * 1000).toISOString();
+  const to   = now.toISOString();
+  const endpoint = `${host.replace(/\/$/, '')}/api/public/metrics/daily?fromTimestamp=${encodeURIComponent(from)}&toTimestamp=${encodeURIComponent(to)}`;
+  const auth = `Basic ${btoa(`${pub}:${secret}`)}`;
+
+  let res;
+  try {
+    res = await fetchImpl(endpoint, { headers: { authorization: auth } });
+  } catch (err) {
+    console.log(`refreshLangfuseAggregate: fetch failed: ${err.message}`);
+    return { ok: false, reason: 'fetch_error' };
+  }
+  if (res.status === 429) {
+    console.log(`refreshLangfuseAggregate: 429 rate limited, retry-after=${res.headers.get('retry-after')}`);
+    return { ok: false, reason: 'rate_limited' };
+  }
+  if (!res.ok) {
+    console.log(`refreshLangfuseAggregate: HTTP ${res.status}`);
+    return { ok: false, reason: `http_${res.status}` };
+  }
+
+  let payload;
+  try {
+    payload = await res.json();
+  } catch (err) {
+    console.log(`refreshLangfuseAggregate: invalid JSON: ${err.message}`);
+    return { ok: false, reason: 'invalid_json' };
+  }
+
+  const rawRows = Array.isArray(payload) ? payload : (payload.data || []);
+  const byDay = new Map();
+  for (const r of rawRows) {
+    const day = (r.date || '').slice(0, 10);
+    if (!day) continue;
+    const entry = byDay.get(day) || {
+      input_tokens: 0, output_tokens: 0, total_tokens: 0,
+      cost_usd: 0, trace_count: 0, models: {},
+    };
+    entry.input_tokens  += Number(r.inputUsage  || 0);
+    entry.output_tokens += Number(r.outputUsage || 0);
+    entry.total_tokens  += Number(r.totalUsage  || 0);
+    entry.cost_usd      += Number(r.totalCost   || 0);
+    entry.trace_count   += Number(r.countTraces || 0);
+    if (r.model) {
+      const m = entry.models[r.model] || { tokens: 0, cost: 0 };
+      m.tokens += Number(r.totalUsage || 0);
+      m.cost   += Number(r.totalCost  || 0);
+      entry.models[r.model] = m;
+    }
+    byDay.set(day, entry);
+  }
+
+  const fetchedAt = now.toISOString();
+  const stmts = [];
+  for (const [day, e] of byDay) {
+    stmts.push(env.DB.prepare(
+      `INSERT INTO usage_daily (agent_id, day, input_tokens, output_tokens, total_tokens, cost_usd, trace_count, model_breakdown, fetched_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(agent_id, day) DO UPDATE SET
+         input_tokens=excluded.input_tokens,
+         output_tokens=excluded.output_tokens,
+         total_tokens=excluded.total_tokens,
+         cost_usd=excluded.cost_usd,
+         trace_count=excluded.trace_count,
+         model_breakdown=excluded.model_breakdown,
+         fetched_at=excluded.fetched_at`
+    ).bind(
+      '__aggregate__', day,
+      e.input_tokens, e.output_tokens, e.total_tokens,
+      e.cost_usd, e.trace_count,
+      JSON.stringify(e.models), fetchedAt,
+    ));
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+
+  await env.DB.prepare(
+    `DELETE FROM usage_daily WHERE agent_id = '__aggregate__' AND day < date('now','-35 days')`
+  ).run();
+
+  return { ok: true, days: byDay.size };
 }
 
 function annotateNode(agent, status, ageSeconds, lastSeenAt) {

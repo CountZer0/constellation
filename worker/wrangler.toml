@@ -15,3 +15,15 @@ database_id = "bae242c9-9409-4d1d-81b9-736d021c4e97"
 #   npx wrangler secret put CONSTELLATION_SECRETS --config worker/wrangler.toml
 # Value shape:
 #   {"linux":"...","mac":"...","win":"..."}
+
+# Phase C — Langfuse usage refresh.
+# Phase D / B will share this cron once they land.
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Langfuse secrets — set via:
+#   npx wrangler secret put LANGFUSE_PUBLIC_KEY --config worker/wrangler.toml
+#   npx wrangler secret put LANGFUSE_SECRET_KEY --config worker/wrangler.toml
+#   npx wrangler secret put LANGFUSE_HOST       --config worker/wrangler.toml
+# LANGFUSE_HOST example: https://us.cloud.langfuse.com
+# LANGFUSE_PROJECT_ID is optional and documented only.

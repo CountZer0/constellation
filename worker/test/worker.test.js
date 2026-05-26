@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { handleRequest, signSnapshot, mergeSnapshots } from '../src/index.js';
+import {
+  handleRequest,
+  signSnapshot,
+  mergeSnapshots,
+  computeRollup,
+  injectUsage,
+  refreshLangfuseAggregate,
+} from '../src/index.js';
 
 class MockD1 {
   constructor() {
     this.latest = new Map();
     this.events = [];
     this.layout = new Map();
+    this.usage = new Map(); // key = `${agent_id}|${day}`
   }
 
   prepare(sql) {
@@ -57,6 +65,17 @@ class MockStatement {
       this.db.layout.clear();
       return { success: true };
     }
+    if (this.sql.includes('INSERT INTO usage_daily')) {
+      const [agent_id, day, input_tokens, output_tokens, total_tokens, cost_usd, trace_count, model_breakdown, fetched_at] = this.params;
+      this.db.usage.set(`${agent_id}|${day}`, {
+        agent_id, day, input_tokens, output_tokens, total_tokens,
+        cost_usd, trace_count, model_breakdown, fetched_at,
+      });
+      return { success: true };
+    }
+    if (this.sql.includes("DELETE FROM usage_daily WHERE agent_id = '__aggregate__'")) {
+      return { success: true };
+    }
     throw new Error(`Unhandled SQL run: ${this.sql}`);
   }
 
@@ -66,6 +85,18 @@ class MockStatement {
     }
     if (this.sql.includes('FROM layout_overrides')) {
       return { results: [...this.db.layout.values()] };
+    }
+    if (this.sql.includes('FROM usage_daily')) {
+      let rows = [...this.db.usage.values()];
+      if (this.sql.includes('WHERE agent_id = ?')) {
+        const [agentId, cutoffDay] = this.params;
+        rows = rows.filter((r) => r.agent_id === agentId && r.day >= cutoffDay);
+      } else if (this.sql.includes('WHERE day >= ?')) {
+        const [cutoffDay] = this.params;
+        rows = rows.filter((r) => r.day >= cutoffDay);
+      }
+      rows.sort((a, b) => (a.agent_id === b.agent_id ? a.day.localeCompare(b.day) : a.agent_id.localeCompare(b.agent_id)));
+      return { results: rows };
     }
     throw new Error(`Unhandled SQL all: ${this.sql}`);
   }
@@ -310,5 +341,148 @@ test('DELETE /v1/layout (bulk) clears all overrides', async () => {
   assert.equal(delRes.status, 200);
   const body = await (await handleRequest(new Request('https://example.test/v1/layout'), env)).json();
   assert.deepEqual(body, { overrides: {} });
+});
+
+// ─── Phase C: Langfuse aggregate usage ─────────────────────────────────────
+
+function dayOffset(daysAgo) {
+  return new Date(Date.now() - daysAgo * 86400 * 1000).toISOString().slice(0, 10);
+}
+function usageFixture(agentId = '__aggregate__', days = 35) {
+  const rows = [];
+  for (let i = 0; i < days; i += 1) {
+    rows.push({
+      agent_id: agentId,
+      day: dayOffset(i),
+      input_tokens: 1000 * (i + 1),
+      output_tokens: 500 * (i + 1),
+      total_tokens: 1500 * (i + 1),
+      cost_usd: 0.5 * (i + 1),
+      trace_count: 10,
+      model_breakdown: '{}',
+      fetched_at: new Date().toISOString(),
+    });
+  }
+  return rows;
+}
+
+test('computeRollup: 24h/7d/30d/all sums match fixture', () => {
+  const rows = usageFixture('__aggregate__', 35);
+  const r24 = computeRollup(rows, 1);
+  const r7  = computeRollup(rows, 7);
+  const r30 = computeRollup(rows, 30);
+  const rAll = computeRollup(rows, null);
+
+  assert.equal(r24.totals.total_tokens, 1500);
+  assert.equal(r24.totals.cost_usd, 0.5);
+  assert.equal(r7.totals.total_tokens, 42000);
+  assert.equal(r30.totals.total_tokens, 697500);
+  assert.equal(rAll.totals.total_tokens, 945000);
+  assert.equal(rAll.daily.length, 35);
+  assert.ok(rAll.daily[0].day < rAll.daily[34].day, 'daily sorted ascending');
+});
+
+test('GET /v1/usage?window=24h returns rollup + by_window shape', async () => {
+  const env = { DB: new MockD1() };
+  for (const r of usageFixture('__aggregate__', 10)) {
+    env.DB.usage.set(`${r.agent_id}|${r.day}`, r);
+  }
+  const res = await handleRequest(
+    new Request('https://example.test/v1/usage?window=24h'),
+    env, {}, new Date('2026-05-25T12:00:00Z')
+  );
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.window, '24h');
+  assert.ok(body.as_of, 'as_of present');
+  assert.ok(body.totals.total_tokens > 0);
+  assert.ok(Array.isArray(body.daily));
+  assert.deepEqual(Object.keys(body.by_window).sort(), ['24h', '30d', '7d', 'all']);
+  assert.deepEqual(body.by_agent, {});
+});
+
+test('GET /v1/usage rejects unknown window', async () => {
+  const env = { DB: new MockD1() };
+  const res = await handleRequest(
+    new Request('https://example.test/v1/usage?window=bogus'),
+    env, {}, new Date()
+  );
+  assert.equal(res.status, 400);
+});
+
+test('injectUsage: mergeSnapshots with usageRows produces meta.usage_24h and usage_aggregate', () => {
+  const macSnap = {
+    schema_version: 1,
+    machine: { tag: 'mac', hostname: 'mbp', os: 'Darwin' },
+    gateway: { state: 'running' },
+    collected_at: new Date().toISOString(),
+    agents: { buddha: { id: 'buddha', label: 'buddha', type: 'agent', sublabel: '[default]' } },
+    edges: [],
+  };
+  const usageRows = usageFixture('__aggregate__', 10);
+  const merged = mergeSnapshots([macSnap], new Date(), usageRows);
+  assert.ok(merged.meta, 'meta block populated');
+  assert.ok(merged.meta.usage_24h, 'usage_24h populated');
+  assert.equal(merged.meta.usage_24h.total_tokens, 1500);
+  assert.equal(merged.meta.usage_aggregate['24h'].total_tokens, 1500);
+  assert.equal(merged.meta.usage_aggregate.all.total_tokens, 1500 * (10 * 11 / 2));
+  assert.ok(Array.isArray(merged.meta.usage_aggregate.daily));
+});
+
+test('mergeSnapshots without usageRows leaves meta absent (backwards compatible)', () => {
+  const merged = mergeSnapshots([], new Date());
+  assert.equal(merged.meta, undefined);
+});
+
+test('refreshLangfuseAggregate: 200 upserts rows aggregated across models per day', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  const payload = {
+    data: [
+      { date: '2026-05-24', model: 'gpt-4o',  inputUsage: 100, outputUsage: 50,  totalUsage: 150, totalCost: 0.1, countTraces: 1 },
+      { date: '2026-05-24', model: 'claude',  inputUsage: 200, outputUsage: 100, totalUsage: 300, totalCost: 0.2, countTraces: 2 },
+      { date: '2026-05-25', model: 'gpt-4o',  inputUsage: 10,  outputUsage: 5,   totalUsage: 15,  totalCost: 0.01, countTraces: 1 },
+    ],
+  };
+  const mockFetch = async () => new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+  const result = await refreshLangfuseAggregate(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, true);
+  assert.equal(result.days, 2);
+
+  const day24 = env.DB.usage.get('__aggregate__|2026-05-24');
+  assert.equal(day24.total_tokens, 450);
+  assert.ok(Math.abs(day24.cost_usd - 0.3) < 1e-9, 'cost sums to ~0.30');
+  const mb = JSON.parse(day24.model_breakdown);
+  assert.equal(mb['gpt-4o'].tokens, 150);
+  assert.equal(mb['claude'].tokens, 300);
+});
+
+test('refreshLangfuseAggregate: 429 leaves cached rows untouched', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  env.DB.usage.set('__aggregate__|2026-05-24', {
+    agent_id: '__aggregate__', day: '2026-05-24',
+    input_tokens: 999, output_tokens: 0, total_tokens: 999,
+    cost_usd: 1.0, trace_count: 1, model_breakdown: '{}', fetched_at: 'old',
+  });
+  const mockFetch = async () => new Response('rate limited', { status: 429, headers: { 'retry-after': '60' } });
+  const result = await refreshLangfuseAggregate(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'rate_limited');
+  assert.equal(env.DB.usage.get('__aggregate__|2026-05-24').input_tokens, 999, 'cached row preserved');
+});
+
+test('refreshLangfuseAggregate: missing env returns gracefully', async () => {
+  const result = await refreshLangfuseAggregate({ DB: new MockD1() });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'missing_env');
 });
 

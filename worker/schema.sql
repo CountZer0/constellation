@@ -28,3 +28,18 @@ CREATE TABLE IF NOT EXISTS layout_overrides (
   y          REAL NOT NULL,
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS usage_daily (
+  agent_id        TEXT    NOT NULL,
+  day             TEXT    NOT NULL,
+  input_tokens    INTEGER NOT NULL DEFAULT 0,
+  output_tokens   INTEGER NOT NULL DEFAULT 0,
+  total_tokens   INTEGER NOT NULL DEFAULT 0,
+  cost_usd        REAL    NOT NULL DEFAULT 0,
+  trace_count     INTEGER NOT NULL DEFAULT 0,
+  model_breakdown TEXT,
+  fetched_at      TEXT    NOT NULL,
+  PRIMARY KEY (agent_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_usage_daily_agent_day
+  ON usage_daily(agent_id, day DESC);

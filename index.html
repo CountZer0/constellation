@@ -94,6 +94,7 @@
     <div class="subtitle">
       <span class="live">●</span> <span id="hdr-summary">loading...</span>
     </div>
+    <div class="subtitle" id="hdr-usage">tokens 24h: — · cost 24h: —</div>
   </div>
   <div class="header-right" id="hdr-machines"></div>
 </div>
@@ -114,6 +115,20 @@
   </div>
   <div class="detail-section"><h3>Toolsets</h3><div class="platforms" id="dp-toolsets"></div></div>
   <div class="detail-section"><h3>Repos</h3><ul class="conn-list" id="dp-repos"></ul></div>
+  <div class="detail-section">
+    <h3>Usage</h3>
+    <table id="dp-usage-table" style="width:100%; font-size:10px; border-collapse:collapse;">
+      <thead><tr style="color:var(--dim);">
+        <th style="text-align:left; font-weight:normal; padding:2px 4px;">Window</th>
+        <th style="text-align:right; font-weight:normal; padding:2px 4px;">In</th>
+        <th style="text-align:right; font-weight:normal; padding:2px 4px;">Out</th>
+        <th style="text-align:right; font-weight:normal; padding:2px 4px;">Cost</th>
+      </tr></thead>
+      <tbody id="dp-usage-body"></tbody>
+    </table>
+    <div id="dp-usage-spark" style="margin-top:6px;"></div>
+    <div id="dp-usage-note" style="font-size:9px; color:var(--dim); font-style:italic; margin-top:4px;">project-wide estimate</div>
+  </div>
   <div class="detail-section"><h3>Connections</h3><ul class="conn-list" id="dp-connections"></ul></div>
   <div class="detail-section"><h3>Platforms</h3><div class="platforms" id="dp-platforms"></div></div>
 </div>
@@ -131,6 +146,7 @@
   <div class="legend-item"><div class="legend-line" style="background: var(--dim); opacity:0.4;"></div> Sibling Profile</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--repo); border-radius: 2px;"></div> Repo (stash-sync)</div>
   <div class="legend-item"><div class="legend-line" style="background: var(--repo);"></div> Repo Link</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--cyan); height:3px; opacity:0.6;"></div> Usage Sparkline</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--yellow);"></div> Stale Machine</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--dim);"></div> Offline Machine</div>
   <div class="legend-footer">
@@ -287,6 +303,15 @@ function updateHeader() {
   const agentCount = Object.values(agents).filter(a => a.type === 'agent').length;
   document.getElementById('hdr-summary').textContent =
     `${machineCount} machine${machineCount !== 1 ? 's' : ''} · ${agentCount} agent${agentCount !== 1 ? 's' : ''}`;
+
+  const u24 = DATA.meta?.usage_24h;
+  const hdrUsage = document.getElementById('hdr-usage');
+  if (u24) {
+    hdrUsage.textContent =
+      `tokens 24h: ${formatTokens(u24.input_tokens)} in / ${formatTokens(u24.output_tokens)} out · cost 24h: ${formatCost(u24.cost_usd)}`;
+  } else {
+    hdrUsage.textContent = 'tokens 24h: — · cost 24h: —';
+  }
 
   const hdrRight = document.getElementById('hdr-machines');
   hdrRight.innerHTML = '';
@@ -783,6 +808,70 @@ window.addEventListener('mouseup', () => {
   }
 });
 
+function formatTokens(n) {
+  const v = Number(n) || 0;
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)     return `${(v / 1_000).toFixed(1)}K`;
+  return `${v}`;
+}
+function formatCost(c) {
+  const v = Number(c) || 0;
+  if (v >= 100) return `$${v.toFixed(0)}`;
+  if (v >= 1)   return `$${v.toFixed(2)}`;
+  return `$${v.toFixed(3)}`;
+}
+function renderUsageSection(agent, details) {
+  const tbody = document.getElementById('dp-usage-body');
+  const spark = document.getElementById('dp-usage-spark');
+  const note  = document.getElementById('dp-usage-note');
+  if (!tbody || !spark || !note) return;
+  tbody.innerHTML = '';
+  spark.innerHTML = '';
+
+  // Phase D will set details.usage per agent; Phase C falls back to the
+  // project-wide aggregate from DATA.meta.usage_aggregate.
+  const perAgent = details?.usage;
+  const aggregate = DATA.meta?.usage_aggregate;
+  const src = perAgent || aggregate;
+  note.style.display = perAgent ? 'none' : '';
+
+  if (!src) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--dim); font-style:italic; padding:4px;">no usage data</td></tr>';
+    return;
+  }
+  const windows = ['24h', '7d', '30d', 'all'];
+  for (const w of windows) {
+    const t = src[w] || {};
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td style="padding:2px 4px;">${w}</td>` +
+      `<td style="text-align:right; padding:2px 4px;">${formatTokens(t.input_tokens)}</td>` +
+      `<td style="text-align:right; padding:2px 4px;">${formatTokens(t.output_tokens)}</td>` +
+      `<td style="text-align:right; padding:2px 4px;">${formatCost(t.cost_usd)}</td>`;
+    tbody.appendChild(tr);
+  }
+  const daily = src.daily || [];
+  if (daily.length) spark.appendChild(buildSparkline(daily, agent.color || 'var(--cyan)'));
+}
+function buildSparkline(daily, color) {
+  const W = 220, H = 28, P = 1;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const vals = daily.map(d => Number(d.total_tokens) || 0);
+  const max = Math.max(1, ...vals);
+  const step = vals.length > 1 ? (W - 2 * P) / (vals.length - 1) : 0;
+  const pts = vals.map((v, i) => `${(P + i * step).toFixed(1)},${(H - P - (v / max) * (H - 2 * P)).toFixed(1)}`).join(' ');
+  const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  poly.setAttribute('points', pts);
+  poly.setAttribute('fill', 'none');
+  poly.setAttribute('stroke', color);
+  poly.setAttribute('stroke-width', '1.2');
+  poly.setAttribute('opacity', '0.7');
+  svg.appendChild(poly);
+  return svg;
+}
+
 function updateDetailPanel() {
   const panel = document.getElementById('detail-panel');
   if (!selectedAgent || !DATA) { panel.classList.add('collapsed'); return; }
@@ -823,6 +912,8 @@ function updateDetailPanel() {
       repoUl.appendChild(li);
     });
   }
+
+  renderUsageSection(a, d);
 
   const connUl = document.getElementById('dp-connections'); connUl.innerHTML = '';
   (DATA.edges || []).forEach(([from, to, type, color]) => {
