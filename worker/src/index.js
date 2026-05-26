@@ -422,10 +422,18 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
   }
 
   const rawRows = Array.isArray(payload) ? payload : (payload.data || []);
-  // One-shot diagnostic: log the first row's shape so misalignments are
-  // easy to spot in `wrangler tail`. Keeps the log short.
+  // One-shot diagnostic: log row[0] shape, then a summary of usage[] entries
+  // across the first 3 rows so we can see if tokens are populated anywhere.
   if (rawRows[0]) {
-    console.log(`refreshLangfuseAggregate: row0 keys=${JSON.stringify(Object.keys(rawRows[0]))} usage0=${JSON.stringify(rawRows[0].usage?.[0] || null)?.slice(0, 200)}`);
+    console.log(`refreshLangfuseAggregate: row0 keys=${JSON.stringify(Object.keys(rawRows[0]))}`);
+    const sample = rawRows.slice(0, 3).map((r) => ({
+      date: r.date,
+      usageLen: Array.isArray(r.usage) ? r.usage.length : 0,
+      models: (Array.isArray(r.usage) ? r.usage : []).map((u) => u.model),
+      maxTotalUsage: Math.max(0, ...(Array.isArray(r.usage) ? r.usage : []).map((u) => Number(u.totalUsage || 0))),
+      sumTotalUsage: (Array.isArray(r.usage) ? r.usage : []).reduce((acc, u) => acc + Number(u.totalUsage || 0), 0),
+    }));
+    console.log(`refreshLangfuseAggregate: sample=${JSON.stringify(sample).slice(0, 500)}`);
   }
   const byDay = new Map();
   for (const r of rawRows) {
