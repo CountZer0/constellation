@@ -344,8 +344,15 @@ export async function loadUsageRows(db, agentId = null, days = 35) {
        FROM usage_daily WHERE day >= ? ORDER BY agent_id ASC, day ASC`
     ).bind(cutoffDay);
   }
-  const rows = await stmt.all();
-  return rows.results || [];
+  // Resilient to missing table — pre-migration, this just returns []
+  // so /agents.json never breaks waiting on the usage_daily migration.
+  try {
+    const rows = await stmt.all();
+    return rows.results || [];
+  } catch (err) {
+    console.log(`loadUsageRows: query failed (${err.message}), returning empty`);
+    return [];
+  }
 }
 
 async function handleUsageGet(url, env, now) {
