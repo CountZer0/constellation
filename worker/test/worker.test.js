@@ -461,6 +461,40 @@ test('refreshLangfuseAggregate: 200 upserts rows aggregated across models per da
   assert.equal(mb['claude'].tokens, 300);
 });
 
+test('refreshLangfuseAggregate: 200 with nested usage[] (real Langfuse shape) parses tokens correctly', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  const payload = {
+    data: [
+      {
+        date: '2026-05-24',
+        countTraces: 5,
+        totalCost: 0.5,
+        usage: [
+          { model: 'gpt-4o', inputUsage: 1000, outputUsage: 500, totalUsage: 1500, totalCost: 0.3 },
+          { model: 'claude', inputUsage: 2000, outputUsage: 1000, totalUsage: 3000, totalCost: 0.2 },
+        ],
+      },
+    ],
+  };
+  const mockFetch = async () => new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+  const result = await refreshLangfuseAggregate(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, true);
+  const day24 = env.DB.usage.get('__aggregate__|2026-05-24');
+  assert.equal(day24.total_tokens, 4500);
+  assert.equal(day24.input_tokens, 3000);
+  assert.equal(day24.output_tokens, 1500);
+  assert.equal(day24.cost_usd, 0.5);
+  assert.equal(day24.trace_count, 5);
+  const mb = JSON.parse(day24.model_breakdown);
+  assert.equal(mb['gpt-4o'].tokens, 1500);
+  assert.equal(mb['claude'].tokens, 3000);
+});
+
 test('refreshLangfuseAggregate: 429 leaves cached rows untouched', async () => {
   const env = {
     DB: new MockD1(),

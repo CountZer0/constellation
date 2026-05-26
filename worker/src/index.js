@@ -422,6 +422,11 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
   }
 
   const rawRows = Array.isArray(payload) ? payload : (payload.data || []);
+  // One-shot diagnostic: log the first row's shape so misalignments are
+  // easy to spot in `wrangler tail`. Keeps the log short.
+  if (rawRows[0]) {
+    console.log(`refreshLangfuseAggregate: row0 keys=${JSON.stringify(Object.keys(rawRows[0]))} usage0=${JSON.stringify(rawRows[0].usage?.[0] || null)?.slice(0, 200)}`);
+  }
   const byDay = new Map();
   for (const r of rawRows) {
     const day = (r.date || '').slice(0, 10);
@@ -430,16 +435,34 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
       input_tokens: 0, output_tokens: 0, total_tokens: 0,
       cost_usd: 0, trace_count: 0, models: {},
     };
-    entry.input_tokens  += Number(r.inputUsage  || 0);
-    entry.output_tokens += Number(r.outputUsage || 0);
-    entry.total_tokens  += Number(r.totalUsage  || 0);
-    entry.cost_usd      += Number(r.totalCost   || 0);
-    entry.trace_count   += Number(r.countTraces || 0);
-    if (r.model) {
-      const m = entry.models[r.model] || { tokens: 0, cost: 0 };
-      m.tokens += Number(r.totalUsage || 0);
-      m.cost   += Number(r.totalCost  || 0);
-      entry.models[r.model] = m;
+    // Row-level cost + trace counts.
+    entry.cost_usd    += Number(r.totalCost   || 0);
+    entry.trace_count += Number(r.countTraces || 0);
+    // Langfuse nests per-model usage under `usage[]` per (date) row.
+    // Tolerant of either nested array OR flat top-level fields (older shape).
+    const usageArr = Array.isArray(r.usage) ? r.usage : (r.usage ? [r.usage] : []);
+    if (usageArr.length) {
+      for (const u of usageArr) {
+        entry.input_tokens  += Number(u.inputUsage  || 0);
+        entry.output_tokens += Number(u.outputUsage || 0);
+        entry.total_tokens  += Number(u.totalUsage  || 0);
+        const modelName = u.model || 'unknown';
+        const m = entry.models[modelName] || { tokens: 0, cost: 0 };
+        m.tokens += Number(u.totalUsage || 0);
+        m.cost   += Number(u.totalCost  || 0);
+        entry.models[modelName] = m;
+      }
+    } else {
+      // Fallback: flat fields (in case Langfuse switches shapes).
+      entry.input_tokens  += Number(r.inputUsage  || 0);
+      entry.output_tokens += Number(r.outputUsage || 0);
+      entry.total_tokens  += Number(r.totalUsage  || 0);
+      if (r.model) {
+        const m = entry.models[r.model] || { tokens: 0, cost: 0 };
+        m.tokens += Number(r.totalUsage || 0);
+        m.cost   += Number(r.totalCost  || 0);
+        entry.models[r.model] = m;
+      }
     }
     byDay.set(day, entry);
   }
