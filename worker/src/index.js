@@ -22,12 +22,20 @@ export default {
     return handleRequest(request, env, ctx);
   },
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(refreshLangfuseAggregate(env));
-    // Tag freshly-ingested traces by sniffing input prefix, then pull the
-    // per-agent rollups. Sequenced so tags written this tick are visible to
-    // the metrics/daily fetch that follows.
+    // Serialize all Langfuse work in one waitUntil. Running aggregate +
+    // tagger + per-agent in parallel pegged CPU and triggered 429s.
+    // Each step short-circuits the rest of the tick on rate_limited.
     ctx.waitUntil((async () => {
-      await tagLangfuseTraces(env);
+      const agg = await refreshLangfuseAggregate(env);
+      if (agg && agg.reason === 'rate_limited') {
+        console.log('scheduled: aggregate 429, skipping tagger + per-agent this tick');
+        return;
+      }
+      const tag = await tagLangfuseTraces(env);
+      if (tag && tag.reason === 'rate_limited') {
+        console.log('scheduled: tagger 429, skipping per-agent this tick');
+        return;
+      }
       await refreshLangfusePerAgent(env);
     })());
     // Phase B will add: ctx.waitUntil(refreshDiscordGuilds(env));
@@ -701,7 +709,9 @@ async function listLangfuseTraces(env, { fetchImpl, now, lookbackHours, logPrefi
   const out = [];
   let page = 1;
   const limit = 100;
-  const MAX_PAGES = 25; // 2500 traces / tick safety cap
+  // Steady-state we expect tens of traces per tick. Cap kept low to bound
+  // CPU + Langfuse calls per cron invocation. Override via env if backfilling.
+  const MAX_PAGES = Number(env.LANGFUSE_TAG_MAX_PAGES) || 5; // 500 traces / tick
   while (page <= MAX_PAGES) {
     const url = `${e.hostTrimmed}/api/public/traces?fromTimestamp=${encodeURIComponent(from)}&toTimestamp=${encodeURIComponent(to)}&page=${page}&limit=${limit}`;
     let res;
@@ -769,7 +779,10 @@ export async function tagLangfuseTraces(env, fetchImpl = fetch, now = new Date()
     return { ok: false, reason: 'load_agents_failed' };
   }
 
-  const lookbackHours = Number(env.LANGFUSE_TAG_LOOKBACK_HOURS) || 36;
+  // Default 4h window — steady-state we just need to catch traces ingested
+  // between cron ticks. Bump LANGFUSE_TAG_LOOKBACK_HOURS for a one-shot
+  // backfill, then drop it back.
+  const lookbackHours = Number(env.LANGFUSE_TAG_LOOKBACK_HOURS) || 4;
   const list = await listLangfuseTraces(env, { fetchImpl, now, lookbackHours, logPrefix });
   if (!list.ok) return list;
 
