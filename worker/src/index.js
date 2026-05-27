@@ -422,19 +422,6 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
   }
 
   const rawRows = Array.isArray(payload) ? payload : (payload.data || []);
-  // One-shot diagnostic: log row[0] shape, then a summary of usage[] entries
-  // across the first 3 rows so we can see if tokens are populated anywhere.
-  if (rawRows[0]) {
-    console.log(`refreshLangfuseAggregate: row0 keys=${JSON.stringify(Object.keys(rawRows[0]))}`);
-    const sample = rawRows.slice(0, 3).map((r) => ({
-      date: r.date,
-      usageLen: Array.isArray(r.usage) ? r.usage.length : 0,
-      models: (Array.isArray(r.usage) ? r.usage : []).map((u) => u.model),
-      maxTotalUsage: Math.max(0, ...(Array.isArray(r.usage) ? r.usage : []).map((u) => Number(u.totalUsage || 0))),
-      sumTotalUsage: (Array.isArray(r.usage) ? r.usage : []).reduce((acc, u) => acc + Number(u.totalUsage || 0), 0),
-    }));
-    console.log(`refreshLangfuseAggregate: sample=${JSON.stringify(sample).slice(0, 500)}`);
-  }
   const byDay = new Map();
   for (const r of rawRows) {
     const day = (r.date || '').slice(0, 10);
@@ -501,6 +488,15 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
   await env.DB.prepare(
     `DELETE FROM usage_daily WHERE agent_id = '__aggregate__' AND day < date('now','-35 days')`
   ).run();
+
+  // Heartbeat — lets wrangler tail confirm healthy operation at a glance.
+  let totalTokens = 0;
+  let totalCost = 0;
+  for (const e of byDay.values()) {
+    totalTokens += e.total_tokens;
+    totalCost   += e.cost_usd;
+  }
+  console.log(`refreshLangfuseAggregate: ok days=${byDay.size} tokens=${totalTokens} cost=$${totalCost.toFixed(2)}`);
 
   return { ok: true, days: byDay.size };
 }
