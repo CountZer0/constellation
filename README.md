@@ -31,6 +31,24 @@ mac                        win                        linux
                                    ▼
               GitHub Pages static frontend
               https://countzer0.github.io/constellation/
+
+
+              ┌─────────────────────────────────────────┐
+              │ Langfuse (external)                     │
+              │ /api/public/metrics/daily               │
+              └──────────────┬──────────────────────────┘
+                             │ Worker cron */15 * * * *
+                             ▼
+              ┌─────────────────────────────────────────┐
+              │ usage_daily (D1)                        │
+              │ agent_id='__aggregate__'  per day row   │
+              │ input/output/total tokens + cost_usd    │
+              └────────────────────┬────────────────────┘
+                                   │ surfaced in /agents.json
+                                   ▼
+              meta.usage_24h / meta.usage_aggregate
+              → header token/cost line + detail-panel
+                sparklines on the frontend
 ```
 
 Production Worker endpoint used by this repo:
@@ -48,6 +66,7 @@ https://constellation-telemetry.count-zr0.workers.dev
 - Interactive frontend: click nodes for details, drag nodes, sync/reset shared layout.
 - Static frontend: GitHub Pages serves `index.html`; live graph data comes from the Worker.
 - Low dependency client: Python stdlib + `curl` + `bash`; no Node install required on telemetry clients.
+- **Langfuse usage stats (Phase C):** Worker polls Langfuse every 15 minutes and surfaces project-wide token counts and cost in the header and in each agent's detail panel (24h / 7d / 30d windows + sparkline).
 
 ## How Updates Flow
 
@@ -455,7 +474,27 @@ Example value shape:
 
 To add a new machine later, generate a new secret and re-run `wrangler secret put` with the full updated JSON object.
 
-## 5. Deploy
+## 5. Configure Langfuse (optional — Phase C)
+
+Constellation pulls project-wide Langfuse usage metrics every 15 minutes and stores them in D1. If you use Langfuse, set three Worker secrets:
+
+```bash
+npx wrangler secret put LANGFUSE_PUBLIC_KEY  --config worker/wrangler.toml
+npx wrangler secret put LANGFUSE_SECRET_KEY  --config worker/wrangler.toml
+npx wrangler secret put LANGFUSE_HOST        --config worker/wrangler.toml
+```
+
+`LANGFUSE_HOST` must include the protocol and no trailing slash, e.g. `https://us.cloud.langfuse.com`. After setting the secrets, wait one cron tick (up to 15 minutes) for data to appear. Verify by running `wrangler tail --config worker/wrangler.toml` and watching for:
+
+```
+refreshLangfuseAggregate: ok days=N tokens=M cost=$X
+```
+
+If this key is not set, the Worker silently skips the Langfuse refresh and logs `refreshLangfuseAggregate: missing Langfuse env, skipping`. No other functionality is affected.
+
+See `docs/usage.md` for full setup, secret rotation, and troubleshooting.
+
+## 6. Deploy
 
 ```bash
 npm run worker:deploy
@@ -467,6 +506,7 @@ Verify endpoints:
 curl -fsS https://constellation-telemetry.<your-subdomain>.workers.dev/v1/health
 curl -fsS https://constellation-telemetry.<your-subdomain>.workers.dev/v1/machines
 curl -fsS https://constellation-telemetry.<your-subdomain>.workers.dev/agents.json
+curl -fsS https://constellation-telemetry.<your-subdomain>.workers.dev/v1/usage
 ```
 
 ---
@@ -531,6 +571,36 @@ Returns machine summaries with last-seen timestamps and status.
 
 Returns service health.
 
+## GET /v1/usage
+
+Returns stored Langfuse usage rows from D1.
+
+Query parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `agent_id` | `__aggregate__` | Agent ID to query; use `__aggregate__` for project-wide totals |
+| `window` | `30` | Number of days to look back (1–365) |
+
+Response shape:
+
+```json
+{
+  "agent_id": "__aggregate__",
+  "window_days": 30,
+  "rows": [
+    {
+      "day": "2026-05-26",
+      "input_tokens": 29298666,
+      "output_tokens": 260935,
+      "total_tokens": 29561530,
+      "cost_usd": 18.15,
+      "trace_count": 452
+    }
+  ]
+}
+```
+
 ## GET /v1/layout
 
 Returns shared frontend layout overrides.
@@ -554,12 +624,13 @@ Resets shared frontend layout overrides.
 | `validate_snapshot.py` | Stdlib snapshot validator |
 | `signing.py` | HMAC-SHA256 signing helper and CLI |
 | `schemas/snapshot.schema.json` | Canonical snapshot schema |
-| `worker/src/index.js` | Cloudflare Worker telemetry authority and merge service |
-| `worker/schema.sql` | D1 database schema |
-| `worker/wrangler.toml` | Wrangler Worker/D1 config |
+| `worker/src/index.js` | Cloudflare Worker: snapshot ingest, merge, `/agents.json`, `/v1/usage`, Langfuse cron |
+| `worker/schema.sql` | D1 database schema (`latest_snapshots`, `snapshot_events`, `usage_daily`) |
+| `worker/wrangler.toml` | Wrangler Worker/D1 config; `[triggers]` declares the `*/15 * * * *` cron |
 | `index.html` | GitHub Pages visualization frontend |
 | `docs/telemetry-api.md` | Lower-level telemetry contract notes |
 | `docs/phase3-worker.md` | Worker/D1 deployment notes |
+| `docs/usage.md` | Langfuse setup, secret rotation, wrangler tail verification |
 | `merge_agents.py` | Legacy/local utility for merging machine JSON files |
 | `constellation-update.sh` | Legacy git-based updater; do not use for current telemetry cron |
 | `agents.json`, `*_agents.json` | Legacy/static snapshots; no longer the live telemetry source |
