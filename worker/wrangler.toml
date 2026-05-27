@@ -16,8 +16,8 @@ database_id = "bae242c9-9409-4d1d-81b9-736d021c4e97"
 # Value shape:
 #   {"linux":"...","mac":"...","win":"..."}
 
-# Phase C — Langfuse usage refresh.
-# Phase D / B will share this cron once they land.
+# Phase C / D — Langfuse usage refresh (aggregate + per-agent).
+# Phase B will share this cron once it lands.
 [triggers]
 crons = ["*/15 * * * *"]
 

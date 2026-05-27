@@ -8,6 +8,9 @@ import {
   computeRollup,
   injectUsage,
   refreshLangfuseAggregate,
+  refreshLangfusePerAgent,
+  extractAgentNameFromTrace,
+  tagLangfuseTraces,
 } from '../src/index.js';
 
 class MockD1 {
@@ -74,6 +77,9 @@ class MockStatement {
       return { success: true };
     }
     if (this.sql.includes("DELETE FROM usage_daily WHERE agent_id = '__aggregate__'")) {
+      return { success: true };
+    }
+    if (this.sql.includes("DELETE FROM usage_daily WHERE agent_id != '__aggregate__'")) {
       return { success: true };
     }
     throw new Error(`Unhandled SQL run: ${this.sql}`);
@@ -520,3 +526,286 @@ test('refreshLangfuseAggregate: missing env returns gracefully', async () => {
   assert.equal(result.reason, 'missing_env');
 });
 
+// ─── Phase D: Langfuse per-agent usage ─────────────────────────────────────
+
+function seedSnapshot(env, machine, agentLabels) {
+  const snap = {
+    schema_version: 1,
+    machine: { tag: machine, hostname: `${machine}-host`, os: 'Linux' },
+    gateway: { state: 'running' },
+    collected_at: new Date().toISOString(),
+    agents: {},
+    edges: [],
+  };
+  for (const label of agentLabels) {
+    snap.agents[label] = {
+      id: label, label, sublabel: '[default]', type: 'agent',
+      color: '#0ff', details: {},
+    };
+  }
+  env.DB.latest.set(machine, {
+    machine_id: machine, hostname: `${machine}-host`, os: 'Linux',
+    snapshot_json: JSON.stringify(snap), schema_version: 1,
+    collected_at: snap.collected_at, received_at: snap.collected_at,
+    updated_at: snap.collected_at,
+  });
+}
+
+test('refreshLangfusePerAgent: skips when missing env', async () => {
+  const result = await refreshLangfusePerAgent({ DB: new MockD1() });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'missing_env');
+});
+
+test('refreshLangfusePerAgent: no agents in snapshots returns ok with zero', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  const mockFetch = async () => { throw new Error('should not be called'); };
+  const result = await refreshLangfusePerAgent(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, true);
+  assert.equal(result.agents, 0);
+});
+
+test('refreshLangfusePerAgent: fetches per-agent metrics with tag filter and upserts rows', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  seedSnapshot(env, 'linux', ['CLU']);
+  seedSnapshot(env, 'win',   ['TRON']);
+
+  const calls = [];
+  const mockFetch = async (url) => {
+    calls.push(url);
+    const u = new URL(url);
+    const tag = u.searchParams.get('tags');
+    const tokens = tag === 'agent:CLU' ? 100 : tag === 'agent:TRON' ? 200 : 0;
+    return new Response(JSON.stringify({
+      data: [{
+        date: '2026-05-24', countTraces: 1, totalCost: 0.01,
+        usage: [{ model: 'claude', inputUsage: tokens, outputUsage: 0, totalUsage: tokens, totalCost: 0.01 }],
+      }],
+    }), { status: 200 });
+  };
+
+  const result = await refreshLangfusePerAgent(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, true);
+  assert.equal(result.agents, 2);
+  assert.equal(calls.length, 2);
+  assert.ok(calls.some((u) => u.includes('tags=agent%3ACLU')));
+  assert.ok(calls.some((u) => u.includes('tags=agent%3ATRON')));
+
+  const cluDay = env.DB.usage.get('CLU|2026-05-24');
+  assert.ok(cluDay, 'CLU row written');
+  assert.equal(cluDay.total_tokens, 100);
+  const tronDay = env.DB.usage.get('TRON|2026-05-24');
+  assert.equal(tronDay.total_tokens, 200);
+});
+
+test('refreshLangfusePerAgent: 429 short-circuits the loop', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  seedSnapshot(env, 'linux', ['CLU', 'TRON']);
+  let calls = 0;
+  const mockFetch = async () => {
+    calls += 1;
+    return new Response('rate limited', { status: 429, headers: { 'retry-after': '60' } });
+  };
+  const result = await refreshLangfusePerAgent(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, true);
+  assert.equal(result.agents, 0);
+  assert.equal(calls, 1, 'should stop after first 429');
+});
+
+test('injectUsage: per-agent rows attach details.usage to matching agent by label', () => {
+  const macSnap = {
+    schema_version: 1,
+    machine: { tag: 'mac', hostname: 'mbp', os: 'Darwin' },
+    gateway: { state: 'running' },
+    collected_at: new Date().toISOString(),
+    agents: {
+      buddha: { id: 'buddha', label: 'buddha', sublabel: '[default]', type: 'agent' },
+      host:   { id: 'host', label: 'HOST', type: 'infra' },
+    },
+    edges: [],
+  };
+  const agentRows = usageFixture('buddha', 10);
+  const aggRows = usageFixture('__aggregate__', 10);
+  const merged = mergeSnapshots([macSnap], new Date(), [...aggRows, ...agentRows]);
+  const buddha = merged.agents['mac_buddha'];
+  assert.ok(buddha, 'scoped agent present');
+  assert.ok(buddha.details && buddha.details.usage, 'usage populated');
+  assert.equal(buddha.details.usage['24h'].total_tokens, 1500);
+  assert.ok(Array.isArray(buddha.details.usage.daily));
+  // Aggregate still populates meta
+  assert.ok(merged.meta.usage_24h);
+});
+
+test('injectUsage: per-agent rows for unknown labels are silently ignored', () => {
+  const macSnap = {
+    schema_version: 1,
+    machine: { tag: 'mac', hostname: 'mbp', os: 'Darwin' },
+    gateway: { state: 'running' },
+    collected_at: new Date().toISOString(),
+    agents: { buddha: { id: 'buddha', label: 'buddha', type: 'agent' } },
+    edges: [],
+  };
+  const ghostRows = usageFixture('GHOST', 5);
+  const merged = mergeSnapshots([macSnap], new Date(), ghostRows);
+  assert.ok(!merged.agents['mac_buddha'].details || !merged.agents['mac_buddha'].details.usage);
+});
+
+// ─── Trace tagger: input-prefix → agent:<name> ─────────────────────────────
+
+function traceWithInput(id, content, extras = {}) {
+  return {
+    id,
+    timestamp: '2026-05-24T12:00:00Z',
+    input: JSON.stringify({ messages: [{ role: 'system', content }] }),
+    tags: [],
+    ...extras,
+  };
+}
+
+test('extractAgentNameFromTrace: # SOUL.md — NAME shape', () => {
+  const t = traceWithInput('t1', '# SOUL.md — CAAC\n## Causal Arbitrage Autonomous Construct');
+  assert.equal(extractAgentNameFromTrace(t), 'CAAC');
+});
+
+test('extractAgentNameFromTrace: # NAME — description shape', () => {
+  const t = traceWithInput('t2', '# TRON — Security Program | ENCOM System\n\n## Identity');
+  assert.equal(extractAgentNameFromTrace(t), 'TRON');
+});
+
+test('extractAgentNameFromTrace: developer role on first message', () => {
+  const t = {
+    id: 't3',
+    input: JSON.stringify({ messages: [{ role: 'developer', content: '# CLU — Compiler' }] }),
+    tags: [],
+  };
+  assert.equal(extractAgentNameFromTrace(t), 'CLU');
+});
+
+test('extractAgentNameFromTrace: multi-word name preserved', () => {
+  const t = traceWithInput('t4', '# Count Zer0 — Architect of the Constellation');
+  assert.equal(extractAgentNameFromTrace(t), 'Count Zer0');
+});
+
+test('extractAgentNameFromTrace: skips traces already tagged agent:*', () => {
+  const t = traceWithInput('t5', '# TRON — anything', { tags: ['agent:TRON', 'env:prod'] });
+  assert.equal(extractAgentNameFromTrace(t), null);
+});
+
+test('extractAgentNameFromTrace: returns null for unparseable input', () => {
+  assert.equal(extractAgentNameFromTrace({ id: 'x', input: null, tags: [] }), null);
+  assert.equal(extractAgentNameFromTrace({ id: 'x', input: 'not json no header', tags: [] }), null);
+  assert.equal(extractAgentNameFromTrace({ id: 'x', input: JSON.stringify({ messages: [] }), tags: [] }), null);
+});
+
+test('extractAgentNameFromTrace: accepts object input (already-parsed)', () => {
+  const t = { id: 't6', input: { messages: [{ role: 'system', content: '# CAAC' }] }, tags: [] };
+  assert.equal(extractAgentNameFromTrace(t), 'CAAC');
+});
+
+test('tagLangfuseTraces: missing env returns gracefully', async () => {
+  const result = await tagLangfuseTraces({ DB: new MockD1() });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'missing_env');
+});
+
+test('tagLangfuseTraces: scans traces, tags known agents, posts ingestion batch', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  seedSnapshot(env, 'linux', ['CLU', 'TRON', 'CAAC']);
+
+  const traces = [
+    traceWithInput('a', '# SOUL.md — CAAC\nmore stuff'),
+    traceWithInput('b', '# TRON — Security Program', { tags: ['env:prod'] }),
+    traceWithInput('c', '# CLU — Compiler', { tags: ['agent:CLU'] }),       // already tagged → skip
+    traceWithInput('d', '# Ghost — not in snapshots'),                         // unknown name → skip
+    traceWithInput('e', 'no header here, just text'),                          // no match
+  ];
+
+  const requests = [];
+  const ingestionBatches = [];
+  const mockFetch = async (url, init) => {
+    requests.push({ url, method: init?.method || 'GET' });
+    if (url.includes('/api/public/traces')) {
+      return new Response(JSON.stringify({ data: traces, meta: { totalPages: 1 } }), { status: 200 });
+    }
+    if (url.includes('/api/public/ingestion')) {
+      const body = JSON.parse(init.body);
+      ingestionBatches.push(body.batch);
+      return new Response('{}', { status: 207 });
+    }
+    return new Response('not found', { status: 404 });
+  };
+
+  const result = await tagLangfuseTraces(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, true);
+  assert.equal(result.tagged, 2, 'CAAC + TRON tagged');
+  assert.equal(result.scanned, 5);
+
+  assert.equal(ingestionBatches.length, 1);
+  const batch = ingestionBatches[0];
+  assert.equal(batch.length, 2);
+  const byTraceId = Object.fromEntries(batch.map((e) => [e.body.id, e]));
+  assert.deepEqual(byTraceId.a.body.tags, ['agent:CAAC']);
+  // Existing env:prod tag preserved alongside new agent tag
+  assert.deepEqual(byTraceId.b.body.tags, ['env:prod', 'agent:TRON']);
+  for (const ev of batch) {
+    assert.equal(ev.type, 'trace-create');
+    assert.ok(ev.id, 'event id present');
+    assert.ok(ev.timestamp, 'event timestamp present');
+  }
+});
+
+test('tagLangfuseTraces: nothing to tag returns ok with tagged=0 and no POST', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  seedSnapshot(env, 'linux', ['CLU']);
+  let postCalls = 0;
+  const mockFetch = async (url, init) => {
+    if ((init?.method || 'GET') === 'POST') postCalls += 1;
+    if (url.includes('/api/public/traces')) {
+      return new Response(JSON.stringify({ data: [traceWithInput('a', 'no header', { tags: [] })], meta: { totalPages: 1 } }), { status: 200 });
+    }
+    return new Response('{}', { status: 200 });
+  };
+  const result = await tagLangfuseTraces(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, true);
+  assert.equal(result.tagged, 0);
+  assert.equal(postCalls, 0, 'no ingestion POST when nothing to tag');
+});
+
+test('tagLangfuseTraces: 429 on listing aborts without POSTing', async () => {
+  const env = {
+    DB: new MockD1(),
+    LANGFUSE_HOST: 'https://langfuse.test',
+    LANGFUSE_PUBLIC_KEY: 'pk',
+    LANGFUSE_SECRET_KEY: 'sk',
+  };
+  seedSnapshot(env, 'linux', ['CLU']);
+  const mockFetch = async () => new Response('rate limited', { status: 429 });
+  const result = await tagLangfuseTraces(env, mockFetch, new Date('2026-05-25T12:00:00Z'));
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'rate_limited');
+});

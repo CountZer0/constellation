@@ -828,8 +828,8 @@ function renderUsageSection(agent, details) {
   tbody.innerHTML = '';
   spark.innerHTML = '';
 
-  // Phase D will set details.usage per agent; Phase C falls back to the
-  // project-wide aggregate from DATA.meta.usage_aggregate.
+  // Per-agent usage lives in details.usage; falls back to the project-wide
+  // aggregate from DATA.meta.usage_aggregate when an agent is not tagged.
   const perAgent = details?.usage;
   const aggregate = DATA.meta?.usage_aggregate;
   const src = perAgent || aggregate;

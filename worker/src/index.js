@@ -23,7 +23,13 @@ export default {
   },
   async scheduled(event, env, ctx) {
     ctx.waitUntil(refreshLangfuseAggregate(env));
-    // Phase D will add: ctx.waitUntil(refreshLangfusePerAgent(env));
+    // Tag freshly-ingested traces by sniffing input prefix, then pull the
+    // per-agent rollups. Sequenced so tags written this tick are visible to
+    // the metrics/daily fetch that follows.
+    ctx.waitUntil((async () => {
+      await tagLangfuseTraces(env);
+      await refreshLangfusePerAgent(env);
+    })());
     // Phase B will add: ctx.waitUntil(refreshDiscordGuilds(env));
   },
 };
@@ -45,7 +51,7 @@ export async function handleRequest(request, env, ctx = {}, now = new Date()) {
   if (request.method === 'GET' && url.pathname === '/agents.json') {
     const [snapshots, usageRows] = await Promise.all([
       loadSnapshots(env.DB),
-      loadUsageRows(env.DB, '__aggregate__', 35),
+      loadUsageRows(env.DB, null, 35),
     ]);
     return json(mergeSnapshots(snapshots.map((s) => s.snapshot), now, usageRows));
   }
@@ -296,7 +302,48 @@ export function injectUsage(merged, usageRows) {
       },
     };
   }
-  // Phase D will populate merged.agents[id].details.usage here.
+
+  const perAgent = new Map();
+  for (const r of usageRows) {
+    if (r.agent_id === '__aggregate__') continue;
+    const arr = perAgent.get(r.agent_id) || [];
+    arr.push(r);
+    perAgent.set(r.agent_id, arr);
+  }
+  if (perAgent.size) {
+    const labelIndex = new Map();
+    for (const [scopedId, agent] of Object.entries(merged.agents)) {
+      if (agent && agent.type === 'agent' && typeof agent.label === 'string') {
+        const existing = labelIndex.get(agent.label);
+        if (existing) existing.push(scopedId);
+        else labelIndex.set(agent.label, [scopedId]);
+      }
+    }
+    for (const [name, rows] of perAgent) {
+      const scopedIds = labelIndex.get(name);
+      if (!scopedIds) continue;
+      const r24 = computeRollup(rows, 1);
+      const r7  = computeRollup(rows, 7);
+      const r30 = computeRollup(rows, 30);
+      const rAll = computeRollup(rows, null);
+      const usage = {
+        '24h': r24.totals,
+        '7d':  r7.totals,
+        '30d': r30.totals,
+        all:   rAll.totals,
+        daily: rAll.daily,
+      };
+      for (const scopedId of scopedIds) {
+        merged.agents[scopedId] = {
+          ...merged.agents[scopedId],
+          details: {
+            ...(merged.agents[scopedId].details || {}),
+            usage,
+          },
+        };
+      }
+    }
+  }
 }
 
 export function computeRollup(rows, windowDays) {
@@ -361,55 +408,79 @@ async function handleUsageGet(url, env, now) {
   if (!(param in windowMap)) {
     return json({ error: 'invalid_window', allowed: Object.keys(windowMap) }, { status: 400 });
   }
-  const rows = await loadUsageRows(env.DB, '__aggregate__', 35);
+  const agentId = url.searchParams.get('agent_id') || '__aggregate__';
+  const rows = await loadUsageRows(env.DB, agentId, 35);
   const main = computeRollup(rows, windowMap[param]);
   const by_window = {};
   for (const [name, days] of Object.entries(windowMap)) {
     by_window[name] = computeRollup(rows, days).totals;
   }
+  const by_agent = {};
+  if (agentId === '__aggregate__') {
+    const allRows = await loadUsageRows(env.DB, null, 35);
+    const grouped = new Map();
+    for (const r of allRows) {
+      if (r.agent_id === '__aggregate__') continue;
+      const arr = grouped.get(r.agent_id) || [];
+      arr.push(r);
+      grouped.set(r.agent_id, arr);
+    }
+    for (const [name, agentRows] of grouped) {
+      by_agent[name] = computeRollup(agentRows, windowMap[param]).totals;
+    }
+  }
   return json({
+    agent_id: agentId,
     window: param,
     as_of: now.toISOString(),
     totals: main.totals,
     daily: main.daily,
     by_window,
-    by_agent: {},
+    by_agent,
   });
 }
 
-export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new Date()) {
+function langfuseEnv(env, logPrefix) {
   const host   = env.LANGFUSE_HOST;
   const pub    = env.LANGFUSE_PUBLIC_KEY;
   const secret = env.LANGFUSE_SECRET_KEY;
   if (!host || !pub || !secret) {
-    console.log('refreshLangfuseAggregate: missing Langfuse env, skipping');
+    console.log(`${logPrefix}: missing Langfuse env, skipping`);
     return { ok: false, reason: 'missing_env' };
   }
   const hostTrimmed = String(host).trim().replace(/\/+$/, '');
   let parsedHost;
   try { parsedHost = new URL(hostTrimmed); } catch { parsedHost = null; }
   if (!parsedHost || !/^https?:$/.test(parsedHost.protocol)) {
-    console.log(`refreshLangfuseAggregate: malformed LANGFUSE_HOST (length=${String(host).length} prefix=${JSON.stringify(String(host).slice(0, 40))})`);
+    console.log(`${logPrefix}: malformed LANGFUSE_HOST (length=${String(host).length} prefix=${JSON.stringify(String(host).slice(0, 40))})`);
     return { ok: false, reason: 'bad_host' };
   }
+  const auth = `Basic ${btoa(`${pub}:${secret}`)}`;
+  return { ok: true, hostTrimmed, auth };
+}
+
+async function fetchLangfuseDaily(env, { tag = null, fetchImpl = fetch, now = new Date(), logPrefix }) {
+  const e = langfuseEnv(env, logPrefix);
+  if (!e.ok) return e;
   const from = new Date(now.getTime() - 30 * 86400 * 1000).toISOString();
   const to   = now.toISOString();
-  const endpoint = `${hostTrimmed}/api/public/metrics/daily?fromTimestamp=${encodeURIComponent(from)}&toTimestamp=${encodeURIComponent(to)}`;
-  const auth = `Basic ${btoa(`${pub}:${secret}`)}`;
+  const params = new URLSearchParams({ fromTimestamp: from, toTimestamp: to });
+  if (tag) params.set('tags', tag);
+  const endpoint = `${e.hostTrimmed}/api/public/metrics/daily?${params.toString()}`;
 
   let res;
   try {
-    res = await fetchImpl(endpoint, { headers: { authorization: auth } });
+    res = await fetchImpl(endpoint, { headers: { authorization: e.auth } });
   } catch (err) {
-    console.log(`refreshLangfuseAggregate: fetch failed: ${err.message}`);
+    console.log(`${logPrefix}: fetch failed: ${err.message}`);
     return { ok: false, reason: 'fetch_error' };
   }
   if (res.status === 429) {
-    console.log(`refreshLangfuseAggregate: 429 rate limited, retry-after=${res.headers.get('retry-after')}`);
+    console.log(`${logPrefix}: 429 rate limited, retry-after=${res.headers.get('retry-after')}`);
     return { ok: false, reason: 'rate_limited' };
   }
   if (!res.ok) {
-    console.log(`refreshLangfuseAggregate: HTTP ${res.status}`);
+    console.log(`${logPrefix}: HTTP ${res.status}`);
     return { ok: false, reason: `http_${res.status}` };
   }
 
@@ -417,7 +488,7 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
   try {
     payload = await res.json();
   } catch (err) {
-    console.log(`refreshLangfuseAggregate: invalid JSON: ${err.message}`);
+    console.log(`${logPrefix}: invalid JSON: ${err.message}`);
     return { ok: false, reason: 'invalid_json' };
   }
 
@@ -430,11 +501,8 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
       input_tokens: 0, output_tokens: 0, total_tokens: 0,
       cost_usd: 0, trace_count: 0, models: {},
     };
-    // Row-level cost + trace counts.
     entry.cost_usd    += Number(r.totalCost   || 0);
     entry.trace_count += Number(r.countTraces || 0);
-    // Langfuse nests per-model usage under `usage[]` per (date) row.
-    // Tolerant of either nested array OR flat top-level fields (older shape).
     const usageArr = Array.isArray(r.usage) ? r.usage : (r.usage ? [r.usage] : []);
     if (usageArr.length) {
       for (const u of usageArr) {
@@ -448,7 +516,6 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
         entry.models[modelName] = m;
       }
     } else {
-      // Fallback: flat fields (in case Langfuse switches shapes).
       entry.input_tokens  += Number(r.inputUsage  || 0);
       entry.output_tokens += Number(r.outputUsage || 0);
       entry.total_tokens  += Number(r.totalUsage  || 0);
@@ -461,11 +528,13 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
     }
     byDay.set(day, entry);
   }
+  return { ok: true, byDay };
+}
 
-  const fetchedAt = now.toISOString();
+async function upsertUsageDaily(db, agentId, byDay, fetchedAt) {
   const stmts = [];
   for (const [day, e] of byDay) {
-    stmts.push(env.DB.prepare(
+    stmts.push(db.prepare(
       `INSERT INTO usage_daily (agent_id, day, input_tokens, output_tokens, total_tokens, cost_usd, trace_count, model_breakdown, fetched_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(agent_id, day) DO UPDATE SET
@@ -477,28 +546,277 @@ export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new
          model_breakdown=excluded.model_breakdown,
          fetched_at=excluded.fetched_at`
     ).bind(
-      '__aggregate__', day,
+      agentId, day,
       e.input_tokens, e.output_tokens, e.total_tokens,
       e.cost_usd, e.trace_count,
       JSON.stringify(e.models), fetchedAt,
     ));
   }
-  if (stmts.length) await env.DB.batch(stmts);
+  if (stmts.length) await db.batch(stmts);
+}
+
+export async function refreshLangfuseAggregate(env, fetchImpl = fetch, now = new Date()) {
+  const logPrefix = 'refreshLangfuseAggregate';
+  const result = await fetchLangfuseDaily(env, { tag: null, fetchImpl, now, logPrefix });
+  if (!result.ok) return result;
+  const { byDay } = result;
+
+  await upsertUsageDaily(env.DB, '__aggregate__', byDay, now.toISOString());
 
   await env.DB.prepare(
     `DELETE FROM usage_daily WHERE agent_id = '__aggregate__' AND day < date('now','-35 days')`
   ).run();
 
-  // Heartbeat — lets wrangler tail confirm healthy operation at a glance.
   let totalTokens = 0;
   let totalCost = 0;
   for (const e of byDay.values()) {
     totalTokens += e.total_tokens;
     totalCost   += e.cost_usd;
   }
-  console.log(`refreshLangfuseAggregate: ok days=${byDay.size} tokens=${totalTokens} cost=$${totalCost.toFixed(2)}`);
+  console.log(`${logPrefix}: ok days=${byDay.size} tokens=${totalTokens} cost=$${totalCost.toFixed(2)}`);
 
   return { ok: true, days: byDay.size };
+}
+
+async function loadAgentNamesForUsage(db) {
+  const snaps = await loadSnapshots(db);
+  const names = new Set();
+  for (const s of snaps) {
+    for (const a of Object.values(s.snapshot.agents || {})) {
+      if (a && a.type === 'agent' && typeof a.label === 'string' && a.label.trim()) {
+        names.add(a.label.trim());
+      }
+    }
+  }
+  return [...names];
+}
+
+export async function refreshLangfusePerAgent(env, fetchImpl = fetch, now = new Date()) {
+  const logPrefix = 'refreshLangfusePerAgent';
+  const envCheck = langfuseEnv(env, logPrefix);
+  if (!envCheck.ok) return envCheck;
+
+  let names;
+  try {
+    names = await loadAgentNamesForUsage(env.DB);
+  } catch (err) {
+    console.log(`${logPrefix}: failed to load agent names: ${err.message}`);
+    return { ok: false, reason: 'load_agents_failed' };
+  }
+  if (!names.length) {
+    console.log(`${logPrefix}: no agents found in latest_snapshots, skipping`);
+    return { ok: true, agents: 0 };
+  }
+
+  const fetchedAt = now.toISOString();
+  let okCount = 0;
+  let failCount = 0;
+  let totalDays = 0;
+  let totalTokens = 0;
+  for (const name of names) {
+    const result = await fetchLangfuseDaily(env, {
+      tag: `agent:${name}`,
+      fetchImpl,
+      now,
+      logPrefix: `${logPrefix}[${name}]`,
+    });
+    if (!result.ok) {
+      failCount += 1;
+      if (result.reason === 'rate_limited') break;
+      continue;
+    }
+    await upsertUsageDaily(env.DB, name, result.byDay, fetchedAt);
+    okCount += 1;
+    totalDays += result.byDay.size;
+    for (const e of result.byDay.values()) totalTokens += e.total_tokens;
+  }
+
+  await env.DB.prepare(
+    `DELETE FROM usage_daily WHERE agent_id != '__aggregate__' AND day < date('now','-35 days')`
+  ).run();
+
+  console.log(`${logPrefix}: ok agents=${okCount}/${names.length} fails=${failCount} days=${totalDays} tokens=${totalTokens}`);
+  return { ok: true, agents: okCount, fails: failCount };
+}
+
+// ── Trace tagger ────────────────────────────────────────────────────────────
+// Hermes doesn't tag traces with agent:<name> yet, but every trace's first
+// system/developer message starts with one of these shapes:
+//   "# SOUL.md — CAAC"
+//   "# TRON — Security Program | ENCOM System"
+// We sniff the input, extract the name, and write the tag back to Langfuse so
+// the existing tag-based refreshLangfusePerAgent flow picks it up next tick.
+
+function _firstMessageContent(input) {
+  if (input == null) return null;
+  let messages = null;
+  if (typeof input === 'string') {
+    try {
+      const parsed = JSON.parse(input);
+      if (parsed && Array.isArray(parsed.messages)) messages = parsed.messages;
+    } catch { /* not JSON, treat as raw text */ }
+    if (!messages) return input;
+  } else if (typeof input === 'object') {
+    if (Array.isArray(input.messages)) messages = input.messages;
+    else if (Array.isArray(input)) messages = input;
+  }
+  if (Array.isArray(messages) && messages.length) {
+    const c = messages[0]?.content;
+    if (typeof c === 'string') return c;
+    if (Array.isArray(c)) {
+      const piece = c.find((p) => typeof p?.text === 'string');
+      if (piece) return piece.text;
+    }
+  }
+  return null;
+}
+
+export function extractAgentNameFromTrace(trace) {
+  if (!trace) return null;
+  if (Array.isArray(trace.tags)) {
+    for (const t of trace.tags) {
+      if (typeof t === 'string' && t.startsWith('agent:')) return null; // already tagged
+    }
+  }
+  const text = _firstMessageContent(trace.input);
+  if (typeof text !== 'string' || !text.trim()) return null;
+  const firstLine = text.split('\n', 1)[0].trim();
+
+  // "# SOUL.md — NAME"  (em / en / hyphen all accepted)
+  let m = firstLine.match(/^#\s+SOUL\.md\s*[—–-]\s*(.+?)\s*$/i);
+  if (m && m[1]) return m[1].trim();
+
+  // "# NAME — anything"  or  "# NAME"
+  m = firstLine.match(/^#\s+([^—–]+?)(?:\s*[—–-]\s*.*)?$/);
+  if (m && m[1]) return m[1].trim();
+
+  return null;
+}
+
+async function listLangfuseTraces(env, { fetchImpl, now, lookbackHours, logPrefix }) {
+  const e = langfuseEnv(env, logPrefix);
+  if (!e.ok) return e;
+  const from = new Date(now.getTime() - lookbackHours * 3600 * 1000).toISOString();
+  const to   = now.toISOString();
+  const out = [];
+  let page = 1;
+  const limit = 100;
+  const MAX_PAGES = 25; // 2500 traces / tick safety cap
+  while (page <= MAX_PAGES) {
+    const url = `${e.hostTrimmed}/api/public/traces?fromTimestamp=${encodeURIComponent(from)}&toTimestamp=${encodeURIComponent(to)}&page=${page}&limit=${limit}`;
+    let res;
+    try {
+      res = await fetchImpl(url, { headers: { authorization: e.auth } });
+    } catch (err) {
+      console.log(`${logPrefix}: fetch failed page=${page}: ${err.message}`);
+      return { ok: false, reason: 'fetch_error', traces: out };
+    }
+    if (res.status === 429) {
+      console.log(`${logPrefix}: 429 rate limited page=${page}`);
+      return { ok: false, reason: 'rate_limited', traces: out };
+    }
+    if (!res.ok) {
+      console.log(`${logPrefix}: HTTP ${res.status} page=${page}`);
+      return { ok: false, reason: `http_${res.status}`, traces: out };
+    }
+    let payload;
+    try { payload = await res.json(); } catch (err) {
+      console.log(`${logPrefix}: invalid JSON page=${page}: ${err.message}`);
+      return { ok: false, reason: 'invalid_json', traces: out };
+    }
+    const batch = Array.isArray(payload) ? payload : (payload.data || []);
+    if (!batch.length) break;
+    out.push(...batch);
+    const totalPages = payload?.meta?.totalPages;
+    if (totalPages != null && page >= totalPages) break;
+    if (batch.length < limit) break;
+    page += 1;
+  }
+  return { ok: true, traces: out };
+}
+
+async function postLangfuseTagBatch(env, fetchImpl, events, logPrefix) {
+  const e = langfuseEnv(env, logPrefix);
+  if (!e.ok) return e;
+  const url = `${e.hostTrimmed}/api/public/ingestion`;
+  let res;
+  try {
+    res = await fetchImpl(url, {
+      method: 'POST',
+      headers: { authorization: e.auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ batch: events }),
+    });
+  } catch (err) {
+    console.log(`${logPrefix}: ingestion fetch failed: ${err.message}`);
+    return { ok: false, reason: 'fetch_error' };
+  }
+  // Langfuse returns 207 multi-status for partial; treat 2xx as ok.
+  if (res.status >= 200 && res.status < 300) return { ok: true, status: res.status };
+  console.log(`${logPrefix}: ingestion HTTP ${res.status}`);
+  return { ok: false, reason: `http_${res.status}` };
+}
+
+export async function tagLangfuseTraces(env, fetchImpl = fetch, now = new Date()) {
+  const logPrefix = 'tagLangfuseTraces';
+  const envCheck = langfuseEnv(env, logPrefix);
+  if (!envCheck.ok) return envCheck;
+
+  let knownNames;
+  try {
+    knownNames = new Set(await loadAgentNamesForUsage(env.DB));
+  } catch (err) {
+    console.log(`${logPrefix}: failed to load agent names: ${err.message}`);
+    return { ok: false, reason: 'load_agents_failed' };
+  }
+
+  const lookbackHours = Number(env.LANGFUSE_TAG_LOOKBACK_HOURS) || 36;
+  const list = await listLangfuseTraces(env, { fetchImpl, now, lookbackHours, logPrefix });
+  if (!list.ok) return list;
+
+  const events = [];
+  let skippedAlreadyTagged = 0;
+  let skippedNoMatch = 0;
+  let skippedUnknown = 0;
+  for (const trace of list.traces) {
+    if (!trace?.id) continue;
+    if (Array.isArray(trace.tags) && trace.tags.some((t) => typeof t === 'string' && t.startsWith('agent:'))) {
+      skippedAlreadyTagged += 1;
+      continue;
+    }
+    const name = extractAgentNameFromTrace(trace);
+    if (!name) { skippedNoMatch += 1; continue; }
+    if (knownNames.size && !knownNames.has(name)) { skippedUnknown += 1; continue; }
+
+    const existing = Array.isArray(trace.tags) ? trace.tags.filter((t) => typeof t === 'string') : [];
+    const mergedTags = Array.from(new Set([...existing, `agent:${name}`]));
+    events.push({
+      id: `tag-${trace.id}-${now.getTime()}`,
+      timestamp: now.toISOString(),
+      type: 'trace-create',
+      body: { id: trace.id, tags: mergedTags },
+    });
+  }
+
+  if (!events.length) {
+    console.log(`${logPrefix}: nothing to tag (traces=${list.traces.length} already=${skippedAlreadyTagged} nomatch=${skippedNoMatch} unknown=${skippedUnknown})`);
+    return { ok: true, tagged: 0, scanned: list.traces.length };
+  }
+
+  // Langfuse ingestion accepts batches; chunk to keep payload reasonable.
+  const CHUNK = 50;
+  let posted = 0;
+  for (let i = 0; i < events.length; i += CHUNK) {
+    const chunk = events.slice(i, i + CHUNK);
+    const result = await postLangfuseTagBatch(env, fetchImpl, chunk, logPrefix);
+    if (!result.ok) {
+      console.log(`${logPrefix}: stopped at chunk ${i / CHUNK} (${result.reason})`);
+      break;
+    }
+    posted += chunk.length;
+  }
+
+  console.log(`${logPrefix}: ok tagged=${posted}/${events.length} scanned=${list.traces.length} already=${skippedAlreadyTagged} nomatch=${skippedNoMatch} unknown=${skippedUnknown}`);
+  return { ok: true, tagged: posted, scanned: list.traces.length };
 }
 
 function annotateNode(agent, status, ageSeconds, lastSeenAt) {
