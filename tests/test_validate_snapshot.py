@@ -27,8 +27,7 @@ VALID_SNAPSHOT = {
             "details": {"model": "openai/gpt-5.5", "provider": "openrouter"},
         },
     },
-    "edges": [["host", "CLU", "sibling", "#444"]],
-    "honcho_peers": [],
+    "edges": [["CLU", "Buddha", "sub-profile", "#444"]],
     "collected_at": "2026-05-19T10:46:18+00:00",
 }
 

@@ -29,7 +29,7 @@ def snapshot(tag, hostname, collected_at, default_id="CLU"):
                 "details": {"model": "test", "provider": "test"},
             },
         },
-        "edges": [["host", default_id, "sibling", "#444"]],
+        "edges": [[default_id, "host", "sub-profile", "#444"]],
         "collected_at": collected_at,
     }
 

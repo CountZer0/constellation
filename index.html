@@ -8,8 +8,8 @@
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Share+Tech+Mono&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
-    --bg: #26263a;
-    --bg-panel: #2c2c42;
+    --bg: #16161f;
+    --bg-panel: #1f1f2e;
     --border: #3d3d5c;
     --text: #c0c0c0;
     --green: #00ff41;
@@ -20,7 +20,7 @@
     --blue: #4d8bff;
     --orange: #ff8c00;
     --repo: #9b59b6;
-    --dim: #444;
+    --dim: #7a7a8c;
   }
   body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; overflow: hidden; height: 100vh; width: 100vw; }
 
@@ -139,11 +139,9 @@
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--orange);"></div> Windows Agent</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--green);"></div> Infrastructure</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--blue);"></div> External Service</div>
-  <div class="legend-item"><div class="legend-line" style="background: var(--yellow);"></div> Honcho Peer</div>
-  <div class="legend-item"><div class="legend-line" style="background: var(--orange);"></div> Cross-Mesh Link</div>
   <div class="legend-item"><div class="legend-line" style="background: var(--green);"></div> Gateway Host</div>
   <div class="legend-item"><div class="legend-line" style="background: var(--blue);"></div> Platform Link</div>
-  <div class="legend-item"><div class="legend-line" style="background: var(--dim); opacity:0.4;"></div> Sibling Profile</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--dim); opacity:0.4;"></div> Sub-profile</div>
   <div class="legend-item"><div class="legend-circle" style="border-color: var(--repo); border-radius: 2px;"></div> Repo (stash-sync)</div>
   <div class="legend-item"><div class="legend-line" style="background: var(--repo);"></div> Repo Link</div>
   <div class="legend-item"><div class="legend-line" style="background: var(--cyan); height:3px; opacity:0.6;"></div> Usage Sparkline</div>
@@ -502,15 +500,83 @@ function drawGrid() {
 function drawMachineZone(zone, color, label, t) {
   const rgb = hexToRgb(color);
   const pulse = (Math.sin(t * 0.5) + 1) / 2;
-  ctx.setLineDash([6, 8]);
-  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.32 + pulse * 0.12})`;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(zone.cx - zone.w/2, zone.cy - zone.h/2, zone.w, zone.h);
+  const alpha = 0.32 + pulse * 0.12;
+  const stroke = `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
+  const fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.04)`;
+
+  const x = zone.cx - zone.w / 2;
+  const y = zone.cy - zone.h / 2;
+  const w = zone.w;
+  const h = zone.h;
+  const bezel = 14;
+  const radius = 10;
+  const screenX = x + bezel;
+  const screenY = y + bezel + 8;
+  const screenW = w - bezel * 2;
+  const screenH = h - bezel * 2 - 8;
+
   ctx.setLineDash([]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = stroke;
+  ctx.fillStyle = fill;
+
+  // Monitor bezel (outer rounded rect)
+  roundRect(ctx, x, y, w, h - 14, radius);
+  ctx.fill();
+  ctx.stroke();
+
+  // Screen inset (slightly brighter inner outline)
+  ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha * 0.6})`;
+  ctx.lineWidth = 1;
+  roundRect(ctx, screenX, screenY, screenW, screenH, 4);
+  ctx.stroke();
+
+  // Stand neck
+  const standTop = y + h - 14;
+  const standW = Math.min(80, w * 0.18);
+  const neckH = 8;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(zone.cx - standW / 2, standTop);
+  ctx.lineTo(zone.cx - standW / 2 + 6, standTop + neckH);
+  ctx.lineTo(zone.cx + standW / 2 - 6, standTop + neckH);
+  ctx.lineTo(zone.cx + standW / 2, standTop);
+  ctx.stroke();
+
+  // Stand base
+  const baseW = Math.min(140, w * 0.32);
+  ctx.beginPath();
+  ctx.moveTo(zone.cx - baseW / 2, standTop + neckH);
+  ctx.lineTo(zone.cx + baseW / 2, standTop + neckH);
+  ctx.stroke();
+
+  // Power LED
+  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.6 + pulse * 0.3})`;
+  ctx.beginPath();
+  ctx.arc(x + w - bezel / 2 - 2, y + (h - 14) - bezel / 2, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Label on the bezel
   ctx.font = "400 10px 'Share Tech Mono', monospace";
-  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.55)`;
+  ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.7)`;
   ctx.textAlign = 'left';
-  ctx.fillText(label, zone.cx - zone.w/2 + 12, zone.cy - zone.h/2 + 16);
+  ctx.fillText(label, screenX + 2, y + bezel - 2);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
 }
 
 function drawEdge(from, to, color, type, t) {
@@ -520,31 +586,17 @@ function drawEdge(from, to, color, type, t) {
   const pulse = (Math.sin(t * 2 + a.x * 0.01) + 1) / 2;
 
   if (type === 'repo') { ctx.setLineDash([2, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.45 + pulse * 0.25})`; ctx.lineWidth = 1.5; }
-  else   if (type === 'honcho') { ctx.setLineDash([8, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.4 + pulse * 0.3})`; ctx.lineWidth = 1.5; }
-  else if (type === 'sibling') { ctx.setLineDash([4, 8]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.15)`; ctx.lineWidth = 1; }
-  else if (type === 'cross-mesh') { ctx.setLineDash([12, 4]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.35 + pulse * 0.25})`; ctx.lineWidth = 2; }
+  else if (type === 'sub-profile') { ctx.setLineDash([4, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.4 + pulse * 0.2})`; ctx.lineWidth = 1.25; }
   else { ctx.setLineDash([]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.5 + pulse * 0.3})`; ctx.lineWidth = 2; }
 
   ctx.beginPath();
-  if (type === 'cross-mesh') {
-    const mx = (a.x + b.x) / 2, my = Math.min(a.y, b.y) - 80;
-    ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(mx, my, b.x, b.y);
-  } else {
-    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-  }
+  ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
   ctx.stroke(); ctx.setLineDash([]);
 
-  if (type !== 'sibling') {
+  if (type !== 'sub-profile') {
     const prog = (t * 0.3 + a.x * 0.005) % 1;
-    let px, py;
-    if (type === 'cross-mesh') {
-      const mx = (a.x + b.x) / 2, my = Math.min(a.y, b.y) - 80;
-      const u = 1 - prog;
-      px = u*u*a.x + 2*u*prog*mx + prog*prog*b.x;
-      py = u*u*a.y + 2*u*prog*my + prog*prog*b.y;
-    } else {
-      px = a.x + (b.x - a.x) * prog; py = a.y + (b.y - a.y) * prog;
-    }
+    const px = a.x + (b.x - a.x) * prog;
+    const py = a.y + (b.y - a.y) * prog;
     ctx.beginPath(); ctx.arc(px, py, 2.5, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.8)`; ctx.fill();
   }

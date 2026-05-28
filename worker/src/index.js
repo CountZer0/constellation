@@ -274,13 +274,6 @@ export function mergeSnapshots(dataList, now = new Date(), usageRows = []) {
     }
   }
 
-  const defaults = [...machineDefaults.values()];
-  for (let i = 0; i < defaults.length; i += 1) {
-    for (let j = i + 1; j < defaults.length; j += 1) {
-      merged.edges.push([defaults[i], defaults[j], 'cross-mesh', '#ff8c00']);
-    }
-  }
-
   if (usageRows && usageRows.length) injectUsage(merged, usageRows);
 
   return merged;

@@ -86,11 +86,9 @@ def merge(data_list, now=None):
         "agents": {},
         "edges": [],
         "gateway": {},
-        "honcho_peers": [],
     }
 
     machine_defaults = {}
-    honcho_peer_keys = set()
 
     for original in data_list:
         data = copy.deepcopy(original)
@@ -113,19 +111,6 @@ def merge(data_list, now=None):
         gw["age_seconds"] = age_seconds
         gw["status"] = status
         merged["gateway"][machine_tag] = gw
-
-        for peer in data.get("honcho_peers", []) or []:
-            # Host key is the canonical identity. Older snapshots may carry
-            # stale peer/workspace labels for the same host; keep the first
-            # canonical/newest host block and ignore later stale duplicates.
-            key = peer.get("host_key") or (peer.get("peer"), peer.get("workspace"))
-            if key not in honcho_peer_keys:
-                honcho_peer_keys.add(key)
-                enriched = copy.deepcopy(peer)
-                enriched["machine"] = machine_tag
-                enriched["machine_status"] = status
-                enriched["machine_last_seen_at"] = collected_at
-                merged["honcho_peers"].append(enriched)
 
         # Merge agents — scope ALL non-service nodes per machine
         for agent_id, agent in data.get("agents", {}).items():
@@ -157,13 +142,6 @@ def merge(data_list, now=None):
                 to_id = f"{machine_tag}_{to_id}"
 
             merged["edges"].append([from_id, to_id, edge[2], edge[3]])
-
-    # Cross-mesh edges between default agents
-    defaults = list(machine_defaults.values())
-    if len(defaults) > 1:
-        for i in range(len(defaults)):
-            for j in range(i + 1, len(defaults)):
-                merged["edges"].append([defaults[i], defaults[j], "cross-mesh", "#ff8c00"])
 
     return merged
 

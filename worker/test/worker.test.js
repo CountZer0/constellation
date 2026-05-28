@@ -117,8 +117,7 @@ function snapshot(machine, collectedAt = '2026-05-19T12:00:00Z') {
       host: { id: 'host', label: 'HOST', sublabel: machine, type: 'infra', color: '#00ff41', machine, details: {} },
       CLU: { id: 'CLU', label: 'CLU', sublabel: '[default]', type: 'agent', color: '#ff8c00', machine, details: { model: 'test', provider: 'test' } },
     },
-    edges: [['host', 'CLU', 'sibling', '#444']],
-    honcho_peers: [],
+    edges: [['CLU', 'CLU', 'sub-profile', '#444']],
     collected_at: collectedAt,
   };
 }
@@ -184,7 +183,7 @@ test('GET /agents.json serves server-side merged graph with machine status', asy
   assert.deepEqual(graph.machines.map((m) => [m.tag, m.status]), [['linux', 'online'], ['win', 'offline']]);
   assert.ok(graph.agents.linux_CLU);
   assert.ok(graph.agents.win_CLU);
-  assert.ok(graph.edges.some((edge) => edge[2] === 'cross-mesh'));
+  assert.ok(graph.edges.every((edge) => edge[2] !== 'cross-mesh'));
 });
 
 test('GET /v1/health returns ok', async () => {

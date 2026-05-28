@@ -114,9 +114,6 @@
         }
       }
     },
-    "honcho_peers": {
-      "type": "array"
-    },
     "collected_at": {
       "type": "string",
       "format": "date-time"

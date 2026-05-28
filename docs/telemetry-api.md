@@ -44,7 +44,6 @@ A valid snapshot must include:
   "gateway": { "pid": 123, "state": "running" },
   "agents": {},
   "edges": [],
-  "honcho_peers": [],
   "collected_at": "2026-05-19T10:46:18+00:00"
 }
 ```

@@ -465,36 +465,6 @@
     ],
     [
       "linux_CLU",
-      "linux_ares",
-      "honcho",
-      "#ffd700"
-    ],
-    [
-      "linux_CLU",
-      "linux_caac",
-      "honcho",
-      "#ffd700"
-    ],
-    [
-      "linux_ares",
-      "linux_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "linux_caac",
-      "linux_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "linux_CLU",
-      "linux_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "linux_CLU",
       "telegram",
       "platform",
       "#4d8bff"
@@ -512,48 +482,6 @@
       "#4d8bff"
     ],
     [
-      "linux_CLU",
-      "linux_TRON",
-      "cross-mesh",
-      "#ff8c00"
-    ],
-    [
-      "linux_CLU",
-      "linux_Ares",
-      "cross-mesh",
-      "#ff8c00"
-    ],
-    [
-      "linux_CLU",
-      "linux_CAAC",
-      "cross-mesh",
-      "#ff8c00"
-    ],
-    [
-      "linux_CLU",
-      "linux_Buddha",
-      "cross-mesh",
-      "#ff8c00"
-    ],
-    [
-      "linux_CLU",
-      "linux_Hiro Protagonist",
-      "cross-mesh",
-      "#ff8c00"
-    ],
-    [
-      "linux_CLU",
-      "linux_Wintermute",
-      "cross-mesh",
-      "#ff8c00"
-    ],
-    [
-      "linux_CLU",
-      "linux_Count Zer0",
-      "cross-mesh",
-      "#ff8c00"
-    ],
-    [
       "mac_host",
       "mac_gateway",
       "gateway-host",
@@ -564,48 +492,6 @@
       "mac_Count Zer0",
       "gateway-host",
       "#00ff41"
-    ],
-    [
-      "mac_Count Zer0",
-      "mac_buddha",
-      "honcho",
-      "#ffd700"
-    ],
-    [
-      "mac_Count Zer0",
-      "mac_hiro",
-      "honcho",
-      "#ffd700"
-    ],
-    [
-      "mac_Count Zer0",
-      "mac_wintermute",
-      "honcho",
-      "#ffd700"
-    ],
-    [
-      "mac_buddha",
-      "mac_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "mac_hiro",
-      "mac_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "mac_wintermute",
-      "mac_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "mac_Count Zer0",
-      "mac_host",
-      "sibling",
-      "#444"
     ],
     [
       "mac_Count Zer0",
@@ -627,36 +513,6 @@
     ],
     [
       "win_CLU",
-      "win_ares",
-      "honcho",
-      "#ffd700"
-    ],
-    [
-      "win_CLU",
-      "win_caac",
-      "honcho",
-      "#ffd700"
-    ],
-    [
-      "win_ares",
-      "win_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "win_caac",
-      "win_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "win_CLU",
-      "win_host",
-      "sibling",
-      "#444"
-    ],
-    [
-      "win_CLU",
       "telegram",
       "platform",
       "#4d8bff"
@@ -675,21 +531,45 @@
     ],
     [
       "linux_CLU",
-      "mac_Count Zer0",
-      "cross-mesh",
-      "#ff8c00"
+      "linux_ares",
+      "sub-profile",
+      "#444"
     ],
     [
       "linux_CLU",
-      "win_CLU",
-      "cross-mesh",
-      "#ff8c00"
+      "linux_caac",
+      "sub-profile",
+      "#444"
     ],
     [
       "mac_Count Zer0",
+      "mac_buddha",
+      "sub-profile",
+      "#444"
+    ],
+    [
+      "mac_Count Zer0",
+      "mac_hiro",
+      "sub-profile",
+      "#444"
+    ],
+    [
+      "mac_Count Zer0",
+      "mac_wintermute",
+      "sub-profile",
+      "#444"
+    ],
+    [
       "win_CLU",
-      "cross-mesh",
-      "#ff8c00"
+      "win_ares",
+      "sub-profile",
+      "#444"
+    ],
+    [
+      "win_CLU",
+      "win_caac",
+      "sub-profile",
+      "#444"
     ]
   ],
   "gateway": {
@@ -714,111 +594,5 @@
       "age_seconds": 487608,
       "status": "offline"
     }
-  },
-  "honcho_peers": [
-    {
-      "peer": "TRON",
-      "workspace": "hermes",
-      "host_key": "hermes",
-      "user_peer": "Countzer0",
-      "enabled": true,
-      "recallMode": "hybrid",
-      "writeFrequency": "async",
-      "sessionStrategy": "per-directory",
-      "machine": "linux",
-      "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
-    },
-    {
-      "peer": "Ares",
-      "workspace": "hermes.ares",
-      "host_key": "hermes.ares",
-      "user_peer": "Countzer0",
-      "enabled": true,
-      "recallMode": "hybrid",
-      "writeFrequency": "async",
-      "sessionStrategy": "per-repo",
-      "machine": "linux",
-      "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
-    },
-    {
-      "peer": "CAAC",
-      "workspace": "hermes.caac",
-      "host_key": "hermes.caac",
-      "user_peer": "Countzer0",
-      "enabled": true,
-      "recallMode": "tools",
-      "writeFrequency": "session",
-      "sessionStrategy": "per-session",
-      "machine": "linux",
-      "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
-    },
-    {
-      "peer": "CLU",
-      "workspace": "hermes.clu",
-      "host_key": "hermes.clu",
-      "user_peer": "Countzer0",
-      "enabled": false,
-      "recallMode": "hybrid",
-      "writeFrequency": "async",
-      "sessionStrategy": "per-directory",
-      "machine": "linux",
-      "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
-    },
-    {
-      "peer": "Buddha",
-      "workspace": "hermes.buddha",
-      "host_key": "hermes.buddha",
-      "user_peer": "Countzer0",
-      "enabled": true,
-      "recallMode": "hybrid",
-      "writeFrequency": "async",
-      "sessionStrategy": "per-directory",
-      "machine": "linux",
-      "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
-    },
-    {
-      "peer": "Hiro Protagonist",
-      "workspace": "hermes.hiro",
-      "host_key": "hermes.hiro",
-      "user_peer": "Countzer0",
-      "enabled": true,
-      "recallMode": "hybrid",
-      "writeFrequency": "async",
-      "sessionStrategy": "per-directory",
-      "machine": "linux",
-      "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
-    },
-    {
-      "peer": "Wintermute",
-      "workspace": "hermes.wintermute",
-      "host_key": "hermes.wintermute",
-      "user_peer": "Countzer0",
-      "enabled": true,
-      "recallMode": "hybrid",
-      "writeFrequency": "async",
-      "sessionStrategy": "per-directory",
-      "machine": "linux",
-      "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
-    },
-    {
-      "peer": "Count Zer0",
-      "workspace": "hermes.countzer0",
-      "host_key": "hermes.countzer0",
-      "user_peer": "Countzer0",
-      "enabled": true,
-      "recallMode": "hybrid",
-      "writeFrequency": "async",
-      "sessionStrategy": "per-directory",
-      "machine": "linux",
-      "machine_status": "online",
-      "machine_last_seen_at": "2026-05-23T12:25:48.770430+00:00"
-    }
-  ]
+  }
 }
