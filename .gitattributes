@@ -1,0 +1,7 @@
+# Normalize line endings. Store text as LF in the repo and check out as LF on
+# every platform, so Google Drive re-syncing files from Windows hosts (CLU/TRON)
+# with CRLF no longer produces whitespace-only diffs across the whole tree.
+* text=auto eol=lf
+
+# Binary assets — never touch.
+*.png binary
