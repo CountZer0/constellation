@@ -387,6 +387,24 @@ test('computeRollup: 24h/7d/30d/all sums match fixture', () => {
   assert.ok(rAll.daily[0].day < rAll.daily[34].day, 'daily sorted ascending');
 });
 
+test("computeRollup: 24h falls back to latest bucket when today's row is missing", () => {
+  // Regression: at 01:14 UTC, Langfuse hadn't populated today's bucket yet
+  // and the strict day-cutoff returned 0 across the board. The fix takes
+  // whichever day is freshest in the rows.
+  const rows = usageFixture('__aggregate__', 35).filter((r) => r.day !== dayOffset(0));
+  const r24 = computeRollup(rows, 1);
+  // Latest remaining bucket = dayOffset(1) = yesterday = i=1 → 1500*2 = 3000.
+  assert.equal(r24.totals.total_tokens, 3000);
+  assert.equal(r24.totals.cost_usd, 1);
+});
+
+test('computeRollup: 24h on empty rows returns zeroes', () => {
+  const r = computeRollup([], 1);
+  assert.equal(r.totals.total_tokens, 0);
+  assert.equal(r.totals.cost_usd, 0);
+  assert.equal(r.daily.length, 0);
+});
+
 test('GET /v1/usage?window=24h returns rollup + by_window shape', async () => {
   const env = { DB: new MockD1() };
   for (const r of usageFixture('__aggregate__', 10)) {
@@ -714,6 +732,33 @@ test('extractAgentNameFromTrace: returns null for unparseable input', () => {
 test('extractAgentNameFromTrace: accepts object input (already-parsed)', () => {
   const t = { id: 't6', input: { messages: [{ role: 'system', content: '# CAAC' }] }, tags: [] };
   assert.equal(extractAgentNameFromTrace(t), 'CAAC');
+});
+
+test('extractAgentNameFromTrace: handles a 100KB stringified input under the CPU budget', () => {
+  // Regression: cron tick at 4:30 AM hit "Exceeded CPU Limit". JSON.parse on
+  // every 100KB trace input × 500 traces/tick was the culprit. The fast path
+  // should regex-extract the first-message content without parsing the full
+  // JSON. This test fakes a realistic-size trace and asserts: (a) the name
+  // is still extracted, (b) it runs in a few ms even when called 500 times.
+  const longBody = 'x'.repeat(95_000);
+  const trace = {
+    id: 'big',
+    tags: [],
+    input: JSON.stringify({
+      messages: [
+        { role: 'system', content: `# SOUL.md — CAAC\nlots more content ${longBody}` },
+        { role: 'user', content: 'hello' },
+      ],
+    }),
+  };
+  assert.equal(extractAgentNameFromTrace(trace), 'CAAC');
+
+  const t0 = Date.now();
+  for (let i = 0; i < 500; i += 1) extractAgentNameFromTrace(trace);
+  const elapsedMs = Date.now() - t0;
+  // Generous budget: 500 calls in under 500ms on any reasonable host. The
+  // pre-optimization JSON.parse path would take many seconds on this size.
+  assert.ok(elapsedMs < 500, `500 calls took ${elapsedMs}ms — fast path may have regressed`);
 });
 
 test('tagLangfuseTraces: missing env returns gracefully', async () => {

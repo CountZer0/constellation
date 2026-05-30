@@ -22,18 +22,31 @@ export default {
     return handleRequest(request, env, ctx);
   },
   async scheduled(event, env, ctx) {
-    // Serialize all Langfuse work in one waitUntil. Running aggregate +
-    // tagger + per-agent in parallel pegged CPU and triggered 429s.
-    // Each step short-circuits the rest of the tick on rate_limited.
+    // The three Langfuse jobs hit different endpoints with different quota
+    // buckets, so don't gate them on each other:
+    //   - tagLangfuseTraces  → /api/public/traces + /api/public/ingestion
+    //   - refreshLangfuseAggregate, refreshLangfusePerAgent
+    //                        → /api/public/metrics/daily (heavily quota'd on
+    //                          free tier; retry-after can be hours)
+    //
+    // Run the tagger every tick so it stays caught up on new traces. Run the
+    // metrics/daily jobs at most once per hour so the daily quota isn't
+    // burned by the 15-minute cron.
     ctx.waitUntil((async () => {
-      const agg = await refreshLangfuseAggregate(env);
-      if (agg && agg.reason === 'rate_limited') {
-        console.log('scheduled: aggregate 429, skipping tagger + per-agent this tick');
-        return;
-      }
       const tag = await tagLangfuseTraces(env);
       if (tag && tag.reason === 'rate_limited') {
-        console.log('scheduled: tagger 429, skipping per-agent this tick');
+        console.log('scheduled: tagger 429 this tick');
+      }
+
+      const minute = new Date().getUTCMinutes();
+      const isHourlyTick = minute < 15;
+      if (!isHourlyTick) {
+        console.log(`scheduled: minute=${minute}, skipping metrics/daily jobs (hourly cadence)`);
+        return;
+      }
+      const agg = await refreshLangfuseAggregate(env);
+      if (agg && agg.reason === 'rate_limited') {
+        console.log('scheduled: aggregate 429, skipping per-agent this tick');
         return;
       }
       await refreshLangfusePerAgent(env);
@@ -350,7 +363,15 @@ export function injectUsage(merged, usageRows) {
 export function computeRollup(rows, windowDays) {
   const sorted = [...rows].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
   let filtered = sorted;
-  if (windowDays != null) {
+  if (windowDays === 1) {
+    // 24h window. Data is bucketed by UTC day, so a strict "day == today"
+    // filter returns 0 between UTC midnight and the next Langfuse refresh
+    // (we've seen the header read 0 at ~01:00 UTC for that reason). Take
+    // the most recent day-bucket we have instead — that's the freshest
+    // 24h-ish slice of data available.
+    const latestDay = sorted.length ? sorted[sorted.length - 1].day : null;
+    filtered = latestDay ? sorted.filter((r) => r.day === latestDay) : [];
+  } else if (windowDays != null) {
     // windowDays = N → include today and the (N-1) days before it
     const cutoff = new Date(Date.now() - (windowDays - 1) * 86400 * 1000);
     const cutoffDay = cutoff.toISOString().slice(0, 10);
@@ -650,23 +671,33 @@ export async function refreshLangfusePerAgent(env, fetchImpl = fetch, now = new 
 
 function _firstMessageContent(input) {
   if (input == null) return null;
-  let messages = null;
   if (typeof input === 'string') {
-    try {
-      const parsed = JSON.parse(input);
-      if (parsed && Array.isArray(parsed.messages)) messages = parsed.messages;
-    } catch { /* not JSON, treat as raw text */ }
-    if (!messages) return input;
-  } else if (typeof input === 'object') {
+    // Fast path: extract the first "content":"..." substring up to the first
+    // newline escape without parsing the entire JSON. Trace.input can be
+    // 100KB+ (full conversation history); calling JSON.parse on every trace
+    // exceeded the Worker CPU budget during backfill.
+    // Bounded work: scan at most the first 4KB and capture up to 300 chars.
+    const head = input.length > 4096 ? input.slice(0, 4096) : input;
+    const m = head.match(/"content"\s*:\s*"([^"\\]{0,300})/);
+    if (m) {
+      // The downstream extractor only looks at the first line, so stopping
+      // at the first unescaped quote or capturing 300 chars is enough.
+      return m[1];
+    }
+    // No structured content found — treat raw input as text.
+    return input;
+  }
+  if (typeof input === 'object') {
+    let messages = null;
     if (Array.isArray(input.messages)) messages = input.messages;
     else if (Array.isArray(input)) messages = input;
-  }
-  if (Array.isArray(messages) && messages.length) {
-    const c = messages[0]?.content;
-    if (typeof c === 'string') return c;
-    if (Array.isArray(c)) {
-      const piece = c.find((p) => typeof p?.text === 'string');
-      if (piece) return piece.text;
+    if (Array.isArray(messages) && messages.length) {
+      const c = messages[0]?.content;
+      if (typeof c === 'string') return c;
+      if (Array.isArray(c)) {
+        const piece = c.find((p) => typeof p?.text === 'string');
+        if (piece) return piece.text;
+      }
     }
   }
   return null;
@@ -694,50 +725,6 @@ export function extractAgentNameFromTrace(trace) {
   return null;
 }
 
-async function listLangfuseTraces(env, { fetchImpl, now, lookbackHours, logPrefix }) {
-  const e = langfuseEnv(env, logPrefix);
-  if (!e.ok) return e;
-  const from = new Date(now.getTime() - lookbackHours * 3600 * 1000).toISOString();
-  const to   = now.toISOString();
-  const out = [];
-  let page = 1;
-  const limit = 100;
-  // Steady-state we expect tens of traces per tick. Cap kept low to bound
-  // CPU + Langfuse calls per cron invocation. Override via env if backfilling.
-  const MAX_PAGES = Number(env.LANGFUSE_TAG_MAX_PAGES) || 5; // 500 traces / tick
-  while (page <= MAX_PAGES) {
-    const url = `${e.hostTrimmed}/api/public/traces?fromTimestamp=${encodeURIComponent(from)}&toTimestamp=${encodeURIComponent(to)}&page=${page}&limit=${limit}`;
-    let res;
-    try {
-      res = await fetchImpl(url, { headers: { authorization: e.auth } });
-    } catch (err) {
-      console.log(`${logPrefix}: fetch failed page=${page}: ${err.message}`);
-      return { ok: false, reason: 'fetch_error', traces: out };
-    }
-    if (res.status === 429) {
-      console.log(`${logPrefix}: 429 rate limited page=${page}`);
-      return { ok: false, reason: 'rate_limited', traces: out };
-    }
-    if (!res.ok) {
-      console.log(`${logPrefix}: HTTP ${res.status} page=${page}`);
-      return { ok: false, reason: `http_${res.status}`, traces: out };
-    }
-    let payload;
-    try { payload = await res.json(); } catch (err) {
-      console.log(`${logPrefix}: invalid JSON page=${page}: ${err.message}`);
-      return { ok: false, reason: 'invalid_json', traces: out };
-    }
-    const batch = Array.isArray(payload) ? payload : (payload.data || []);
-    if (!batch.length) break;
-    out.push(...batch);
-    const totalPages = payload?.meta?.totalPages;
-    if (totalPages != null && page >= totalPages) break;
-    if (batch.length < limit) break;
-    page += 1;
-  }
-  return { ok: true, traces: out };
-}
-
 async function postLangfuseTagBatch(env, fetchImpl, events, logPrefix) {
   const e = langfuseEnv(env, logPrefix);
   if (!e.ok) return e;
@@ -761,8 +748,8 @@ async function postLangfuseTagBatch(env, fetchImpl, events, logPrefix) {
 
 export async function tagLangfuseTraces(env, fetchImpl = fetch, now = new Date()) {
   const logPrefix = 'tagLangfuseTraces';
-  const envCheck = langfuseEnv(env, logPrefix);
-  if (!envCheck.ok) return envCheck;
+  const e = langfuseEnv(env, logPrefix);
+  if (!e.ok) return e;
 
   let knownNames;
   try {
@@ -776,53 +763,134 @@ export async function tagLangfuseTraces(env, fetchImpl = fetch, now = new Date()
   // between cron ticks. Bump LANGFUSE_TAG_LOOKBACK_HOURS for a one-shot
   // backfill, then drop it back.
   const lookbackHours = Number(env.LANGFUSE_TAG_LOOKBACK_HOURS) || 4;
-  const list = await listLangfuseTraces(env, { fetchImpl, now, lookbackHours, logPrefix });
-  if (!list.ok) return list;
+  const from = new Date(now.getTime() - lookbackHours * 3600 * 1000).toISOString();
+  const to   = now.toISOString();
+  const limit = 100;
+  // Steady-state we expect tens of traces per tick. Cap kept low to bound
+  // CPU + Langfuse calls per cron invocation. Override via env for backfill.
+  // NOTE: do not raise this without testing — each Langfuse trace input can
+  // be tens of KB (full conversation prompts), and a single Worker invocation
+  // has a 128MB ceiling. We stream page-by-page below, but each page still
+  // sits in memory while we process it.
+  const MAX_PAGES = Number(env.LANGFUSE_TAG_MAX_PAGES) || 5; // 500 traces / tick
+  // Flush tag-events to Langfuse ingestion in chunks so they don't pile up
+  // across many pages during a backfill.
+  const CHUNK = 50;
 
-  const events = [];
+  let scanned = 0;
+  let posted = 0;
+  let queued = 0;
   let skippedAlreadyTagged = 0;
   let skippedNoMatch = 0;
   let skippedUnknown = 0;
-  for (const trace of list.traces) {
-    if (!trace?.id) continue;
-    if (Array.isArray(trace.tags) && trace.tags.some((t) => typeof t === 'string' && t.startsWith('agent:'))) {
-      skippedAlreadyTagged += 1;
-      continue;
+  // Sample of names rejected by the knownNames filter — surfaced in the
+  // final log line so we can diagnose label mismatches (casing, decoration,
+  // genuinely-unknown agents) without dumping every trace.
+  const unknownSamples = new Map(); // name → count
+  let events = [];
+  let abortReason = null;
+
+  async function flush() {
+    while (events.length >= CHUNK) {
+      const chunk = events.slice(0, CHUNK);
+      events = events.slice(CHUNK);
+      const result = await postLangfuseTagBatch(env, fetchImpl, chunk, logPrefix);
+      if (!result.ok) {
+        abortReason = result.reason;
+        return false;
+      }
+      posted += chunk.length;
     }
-    const name = extractAgentNameFromTrace(trace);
-    if (!name) { skippedNoMatch += 1; continue; }
-    if (knownNames.size && !knownNames.has(name)) { skippedUnknown += 1; continue; }
-
-    const existing = Array.isArray(trace.tags) ? trace.tags.filter((t) => typeof t === 'string') : [];
-    const mergedTags = Array.from(new Set([...existing, `agent:${name}`]));
-    events.push({
-      id: `tag-${trace.id}-${now.getTime()}`,
-      timestamp: now.toISOString(),
-      type: 'trace-create',
-      body: { id: trace.id, tags: mergedTags },
-    });
+    return true;
   }
 
-  if (!events.length) {
-    console.log(`${logPrefix}: nothing to tag (traces=${list.traces.length} already=${skippedAlreadyTagged} nomatch=${skippedNoMatch} unknown=${skippedUnknown})`);
-    return { ok: true, tagged: 0, scanned: list.traces.length };
-  }
-
-  // Langfuse ingestion accepts batches; chunk to keep payload reasonable.
-  const CHUNK = 50;
-  let posted = 0;
-  for (let i = 0; i < events.length; i += CHUNK) {
-    const chunk = events.slice(i, i + CHUNK);
-    const result = await postLangfuseTagBatch(env, fetchImpl, chunk, logPrefix);
-    if (!result.ok) {
-      console.log(`${logPrefix}: stopped at chunk ${i / CHUNK} (${result.reason})`);
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const url = `${e.hostTrimmed}/api/public/traces?fromTimestamp=${encodeURIComponent(from)}&toTimestamp=${encodeURIComponent(to)}&page=${page}&limit=${limit}`;
+    let res;
+    try {
+      res = await fetchImpl(url, { headers: { authorization: e.auth } });
+    } catch (err) {
+      console.log(`${logPrefix}: fetch failed page=${page}: ${err.message}`);
+      abortReason = 'fetch_error';
       break;
     }
-    posted += chunk.length;
+    if (res.status === 429) {
+      console.log(`${logPrefix}: 429 rate limited page=${page}`);
+      abortReason = 'rate_limited';
+      break;
+    }
+    if (!res.ok) {
+      console.log(`${logPrefix}: HTTP ${res.status} page=${page}`);
+      abortReason = `http_${res.status}`;
+      break;
+    }
+    let payload;
+    try { payload = await res.json(); } catch (err) {
+      console.log(`${logPrefix}: invalid JSON page=${page}: ${err.message}`);
+      abortReason = 'invalid_json';
+      break;
+    }
+    const batch = Array.isArray(payload) ? payload : (payload.data || []);
+    if (!batch.length) { payload = null; break; }
+
+    // Process page inline so trace bodies (which can be large) don't stay
+    // in memory across pages.
+    for (const trace of batch) {
+      scanned += 1;
+      if (!trace?.id) continue;
+      if (Array.isArray(trace.tags) && trace.tags.some((t) => typeof t === 'string' && t.startsWith('agent:'))) {
+        skippedAlreadyTagged += 1;
+        continue;
+      }
+      const name = extractAgentNameFromTrace(trace);
+      if (!name) { skippedNoMatch += 1; continue; }
+      if (knownNames.size && !knownNames.has(name)) {
+        skippedUnknown += 1;
+        unknownSamples.set(name, (unknownSamples.get(name) || 0) + 1);
+        continue;
+      }
+
+      const existing = Array.isArray(trace.tags) ? trace.tags.filter((t) => typeof t === 'string') : [];
+      const mergedTags = Array.from(new Set([...existing, `agent:${name}`]));
+      events.push({
+        id: `tag-${trace.id}-${now.getTime()}`,
+        timestamp: now.toISOString(),
+        type: 'trace-create',
+        body: { id: trace.id, tags: mergedTags },
+      });
+      queued += 1;
+    }
+
+    const totalPages = payload?.meta?.totalPages;
+    const batchLen = batch.length;
+    // Drop references before flushing to maximize GC headroom.
+    payload = null;
+
+    if (!(await flush())) break;
+
+    if (totalPages != null && page >= totalPages) break;
+    if (batchLen < limit) break;
   }
 
-  console.log(`${logPrefix}: ok tagged=${posted}/${events.length} scanned=${list.traces.length} already=${skippedAlreadyTagged} nomatch=${skippedNoMatch} unknown=${skippedUnknown}`);
-  return { ok: true, tagged: posted, scanned: list.traces.length };
+  // Final flush of any remainder (< CHUNK).
+  if (!abortReason && events.length) {
+    const chunk = events;
+    events = [];
+    const result = await postLangfuseTagBatch(env, fetchImpl, chunk, logPrefix);
+    if (result.ok) posted += chunk.length;
+    else abortReason = result.reason;
+  }
+
+  const status = abortReason ? `aborted=${abortReason}` : 'ok';
+  console.log(`${logPrefix}: ${status} tagged=${posted}/${queued} scanned=${scanned} already=${skippedAlreadyTagged} nomatch=${skippedNoMatch} unknown=${skippedUnknown}`);
+  if (unknownSamples.size) {
+    const sorted = [...unknownSamples.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const known = [...knownNames].slice(0, 20).join(', ');
+    console.log(`${logPrefix}: unknown-name samples (top 10): ${sorted.map(([n, c]) => `${JSON.stringify(n)}×${c}`).join(', ')}`);
+    console.log(`${logPrefix}: knownNames (first 20 of ${knownNames.size}): ${known}`);
+  }
+  if (abortReason === 'rate_limited') return { ok: false, reason: 'rate_limited', tagged: posted, scanned };
+  return { ok: true, tagged: posted, scanned };
 }
 
 function annotateNode(agent, status, ageSeconds, lastSeenAt) {
