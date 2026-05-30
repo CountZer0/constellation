@@ -247,6 +247,24 @@ async function resetAllLayout() {
 }
 
 let DATA = null;
+// Transitional shim: drop legacy edge types still served from stored snapshots
+// and synthesize sub-profile edges (default → each sub) if missing.
+function normalizeEdges(data) {
+  if (!data || !data.edges || !data.agents) return;
+  const LEGACY = new Set(['cross-mesh', 'honcho', 'sibling']);
+  const defaults = {};
+  for (const [id, a] of Object.entries(data.agents)) {
+    if (a && a.sublabel === '[default]') defaults[a.machine] = id;
+  }
+  const kept = data.edges.filter(e => !LEGACY.has(e[2]));
+  const have = new Set(kept.filter(e => e[2] === 'sub-profile').map(e => `${e[0]}→${e[1]}`));
+  for (const [id, a] of Object.entries(data.agents)) {
+    if (!a || a.type !== 'agent' || a.sublabel === '[default]') continue;
+    const d = defaults[a.machine];
+    if (d && !have.has(`${d}→${id}`)) kept.push([d, id, 'sub-profile', '#444']);
+  }
+  data.edges = kept;
+}
 let selectedAgent = null;
 let hoveredAgent = null;
 let time = 0;
@@ -268,6 +286,7 @@ async function loadData(retries = 3) {
       const resp = await fetch(AGENTS_URL, { cache: 'no-cache' });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       DATA = await resp.json();
+      normalizeEdges(DATA);
       // Render fast using whatever the local cache has; the server overlay
       // arrives async and overrides — server is the source of truth.
       layoutOverrides = loadLocalOverrides();
@@ -586,7 +605,7 @@ function drawEdge(from, to, color, type, t) {
   const pulse = (Math.sin(t * 2 + a.x * 0.01) + 1) / 2;
 
   if (type === 'repo') { ctx.setLineDash([2, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.45 + pulse * 0.25})`; ctx.lineWidth = 1.5; }
-  else if (type === 'sub-profile') { ctx.setLineDash([4, 6]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.4 + pulse * 0.2})`; ctx.lineWidth = 1.25; }
+  else if (type === 'sub-profile') { ctx.setLineDash([1.5, 4]); ctx.strokeStyle = 'rgba(110,110,135,0.55)'; ctx.lineWidth = 1; }
   else { ctx.setLineDash([]); ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},${0.5 + pulse * 0.3})`; ctx.lineWidth = 2; }
 
   ctx.beginPath();
@@ -1020,6 +1039,7 @@ setInterval(async () => {
     const resp = await fetch(AGENTS_URL, { cache: 'no-cache' });
     if (!resp.ok) return;
     const fresh = await resp.json();
+    normalizeEdges(fresh);
     // Deep compare agents count to detect changes
     const oldCount = Object.keys(DATA?.agents || {}).length;
     const newCount = Object.keys(fresh.agents || {}).length;
